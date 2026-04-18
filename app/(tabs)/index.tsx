@@ -1,7 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -9,277 +15,505 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { darkTheme, lightTheme } from "../../constants/Colors";
+import { Colors } from "../../constants/Colors";
+import { useAppContext } from "../../context/AppContext";
+import { supabase } from "../../lib/supabase";
+
+type Item = {
+  id: string;
+  created_at: string;
+  type: "lost" | "found";
+  name: string;
+  category: string;
+  building: string;
+  floor: string;
+  description: string;
+  image_url: string | null;
+};
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("lost");
-  const [isDark, setIsDark] = useState(false);
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"lost" | "found">("lost");
 
-  const currentTheme = isDark ? darkTheme : lightTheme;
-  const styles = getStyles(currentTheme);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBuilding, setSelectedBuilding] = useState("Semua");
+
+  const { isDarkMode, toggleTheme, currentTheme } = useAppContext();
+
+  const filterBuildings = [
+    "Semua",
+    "Gedung A",
+    "Gedung B",
+    "Gedung C",
+    "Gedung D",
+  ];
+
+  const fetchItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("items")
+        .select("*")
+        .eq("type", activeTab)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching items:", error);
+        return;
+      }
+
+      setItems(data || []);
+    } catch (error) {
+      console.error("Gagal memuat data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      fetchItems();
+    }, [activeTab]),
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchItems();
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const filteredItems = items.filter((item) => {
+    const matchSearch =
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.description &&
+        item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchBuilding =
+      selectedBuilding === "Semua" || item.building === selectedBuilding;
+    return matchSearch && matchBuilding;
+  });
+
+  const renderItem = ({ item }: { item: Item }) => (
+    <TouchableOpacity
+      style={[
+        styles.card,
+        {
+          backgroundColor: currentTheme.cardBackground,
+          borderColor: currentTheme.border,
+        },
+      ]}
+    >
+      {item.image_url ? (
+        <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+      ) : (
+        <View
+          style={[
+            styles.noImageContainer,
+            { backgroundColor: currentTheme.background },
+          ]}
+        >
+          <Ionicons
+            name="image-outline"
+            size={40}
+            color={currentTheme.textSecondary}
+          />
+        </View>
+      )}
+
+      <View style={styles.cardContent}>
+        <View style={styles.cardHeader}>
+          <Text
+            style={[styles.itemName, { color: currentTheme.textMain }]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <View
+            style={[
+              styles.badge,
+              activeTab === "lost" ? styles.badgeLost : styles.badgeFound,
+            ]}
+          >
+            <Text style={styles.badgeText}>
+              {activeTab === "lost" ? "Hilang" : "Ditemukan"}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.itemCategory}>{item.category}</Text>
+
+        <View style={styles.locationRow}>
+          <Ionicons
+            name="location-outline"
+            size={16}
+            color={currentTheme.textSecondary}
+          />
+          <Text
+            style={[styles.locationText, { color: currentTheme.textSecondary }]}
+          >
+            {item.building} - {item.floor}
+          </Text>
+        </View>
+
+        <View style={styles.dateRow}>
+          <Ionicons
+            name="time-outline"
+            size={14}
+            color={currentTheme.textSecondary}
+          />
+          <Text
+            style={[styles.dateText, { color: currentTheme.textSecondary }]}
+          >
+            {formatDate(item.created_at)}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>LOST N FOUND</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity onPress={() => setIsDark(!isDark)}>
-            <Ionicons
-              name={isDark ? "sunny-outline" : "moon-outline"}
-              size={24}
-              color={currentTheme.primaryText}
-              style={styles.iconMargin}
-            />
-          </TouchableOpacity>
-          <Ionicons
-            name="bar-chart-outline"
-            size={24}
-            color={currentTheme.primaryText}
-            style={styles.iconMargin}
-          />
-          <Ionicons
-            name="notifications-outline"
-            size={24}
-            color={currentTheme.primaryText}
-          />
-        </View>
-      </View>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: Colors.primary }]}
+    >
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
 
-      <View style={styles.topTabs}>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === "lost" && styles.activeTabButton,
-          ]}
-          onPress={() => setActiveTab("lost")}
-        >
-          <Text
+      <View
+        style={[styles.container, { backgroundColor: currentTheme.background }]}
+      >
+        <View style={styles.topHeader}>
+          <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity onPress={toggleTheme} style={styles.iconButton}>
+              <Ionicons
+                name={isDarkMode ? "sunny" : "moon"}
+                size={22}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="stats-chart" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton}>
+              <Ionicons name="notifications" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
             style={[
-              styles.tabText,
-              activeTab === "lost" && styles.activeTabText,
+              styles.tabButton,
+              { borderBottomColor: currentTheme.border },
+              activeTab === "lost" && { borderBottomColor: Colors.primary },
+            ]}
+            onPress={() => setActiveTab("lost")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                { color: currentTheme.textSecondary },
+                activeTab === "lost" && { color: Colors.primary },
+              ]}
+            >
+              Lost Items
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tabButton,
+              { borderBottomColor: currentTheme.border },
+              activeTab === "found" && { borderBottomColor: Colors.primary },
+            ]}
+            onPress={() => setActiveTab("found")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                { color: currentTheme.textSecondary },
+                activeTab === "found" && { color: Colors.primary },
+              ]}
+            >
+              Found Items
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.searchSection}>
+          <View
+            style={[
+              styles.searchBar,
+              {
+                backgroundColor: currentTheme.searchBackground,
+                borderColor: currentTheme.border,
+              },
             ]}
           >
-            Lost Items
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === "found" && styles.activeTabButton,
-          ]}
-          onPress={() => setActiveTab("found")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "found" && styles.activeTabText,
-            ]}
+            <TextInput
+              style={[styles.searchInput, { color: currentTheme.textMain }]}
+              placeholder={`Search ${activeTab} item`}
+              placeholderTextColor={currentTheme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            <Ionicons
+              name="search"
+              size={20}
+              color={currentTheme.textSecondary}
+              style={styles.searchIcon}
+            />
+          </View>
+        </View>
+
+        <View style={styles.filterSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
           >
-            Found Items
-          </Text>
-        </TouchableOpacity>
-      </View>
+            {filterBuildings.map((bldg, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: currentTheme.cardBackground,
+                    borderColor: currentTheme.border,
+                  },
+                  selectedBuilding === bldg && {
+                    backgroundColor: currentTheme.chipActive,
+                    borderColor: currentTheme.chipActive,
+                  },
+                ]}
+                onPress={() => setSelectedBuilding(bldg)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    { color: currentTheme.textSecondary },
+                    selectedBuilding === bldg && {
+                      color: currentTheme.textMain,
+                      fontWeight: "bold",
+                    },
+                  ]}
+                >
+                  {bldg}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
-      <ScrollView style={styles.content}>
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search lost item"
-            placeholderTextColor={currentTheme.textMuted}
+        {loading ? (
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : filteredItems.length === 0 ? (
+          <View style={styles.centerContent}>
+            <Ionicons
+              name="search-outline"
+              size={60}
+              color={currentTheme.iconEmpty}
+            />
+            <Text
+              style={[styles.emptyText, { color: currentTheme.textSecondary }]}
+            >
+              Tidak ada data yang sesuai dengan pencarian Anda.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredItems}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[Colors.primary]}
+              />
+            }
           />
-          <Ionicons name="search" size={20} color={currentTheme.textMuted} />
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterContainer}
-        >
-          <TouchableOpacity style={styles.filterChipActive}>
-            <Text style={styles.filterChipTextActive}>Semua</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterChip}>
-            <Text style={styles.filterChipText}>Gedung C</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterChip}>
-            <Text style={styles.filterChipText}>Gedung D</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterChip}>
-            <Text style={styles.filterChipText}>Gedung B</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        <View style={styles.card}>
-          <View style={styles.imagePlaceholder}>
-            <Ionicons
-              name="image-outline"
-              size={48}
-              color={currentTheme.iconPlaceholder}
-            />
-          </View>
-          <View style={styles.cardDetails}>
-            <Text style={styles.cardTitle}>Barang Hilang A</Text>
-            <View style={styles.locationRow}>
-              <Ionicons
-                name="location-outline"
-                size={16}
-                color={currentTheme.textSecondary}
-              />
-              <Text style={styles.locationText}>Gedung C</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.imagePlaceholder}>
-            <Ionicons
-              name="image-outline"
-              size={48}
-              color={currentTheme.iconPlaceholder}
-            />
-          </View>
-          <View style={styles.cardDetails}>
-            <Text style={styles.cardTitle}>Barang Hilang B</Text>
-            <View style={styles.locationRow}>
-              <Ionicons
-                name="location-outline"
-                size={16}
-                color={currentTheme.textSecondary}
-              />
-              <Text style={styles.locationText}>Gedung D</Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
-const getStyles = (theme: any) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    header: {
-      backgroundColor: theme.primary,
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 15,
-    },
-    headerTitle: {
-      color: theme.primaryText,
-      fontSize: 18,
-      fontWeight: "bold",
-    },
-    headerIcons: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    iconMargin: {
-      marginRight: 15,
-    },
-    topTabs: {
-      flexDirection: "row",
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-    },
-    tabButton: {
-      flex: 1,
-      paddingVertical: 15,
-      alignItems: "center",
-    },
-    activeTabButton: {
-      borderBottomWidth: 2,
-      borderBottomColor: theme.borderActive,
-    },
-    tabText: {
-      fontSize: 16,
-      color: theme.textSecondary,
-    },
-    activeTabText: {
-      fontWeight: "bold",
-      color: theme.textMain,
-    },
-    content: {
-      flex: 1,
-      padding: 20,
-    },
-    searchContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: theme.cardBackground,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 25,
-      paddingHorizontal: 15,
-      paddingVertical: 10,
-      marginBottom: 15,
-    },
-    searchInput: {
-      flex: 1,
-      fontSize: 16,
-      color: theme.textMain,
-    },
-    filterContainer: {
-      flexDirection: "row",
-      marginBottom: 20,
-    },
-    filterChipActive: {
-      backgroundColor: theme.chipActive,
-      paddingHorizontal: 15,
-      paddingVertical: 8,
-      borderRadius: 20,
-      marginRight: 10,
-    },
-    filterChipTextActive: {
-      color: theme.textMain,
-      fontWeight: "bold",
-    },
-    filterChip: {
-      backgroundColor: theme.cardBackground,
-      borderWidth: 1,
-      borderColor: theme.border,
-      paddingHorizontal: 15,
-      paddingVertical: 8,
-      borderRadius: 20,
-      marginRight: 10,
-    },
-    filterChipText: {
-      color: theme.textSecondary,
-    },
-    card: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 12,
-      marginBottom: 20,
-      overflow: "hidden",
-    },
-    imagePlaceholder: {
-      height: 180,
-      backgroundColor: theme.background,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    cardDetails: {
-      padding: 15,
-      backgroundColor: theme.cardBackground,
-    },
-    cardTitle: {
-      fontSize: 16,
-      fontWeight: "bold",
-      color: theme.textMain,
-      marginBottom: 5,
-    },
-    locationRow: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    locationText: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      marginLeft: 5,
-    },
-  });
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+  topHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: Colors.primary,
+  },
+  topHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconButton: {
+    marginLeft: 15,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    marginBottom: 15,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderBottomWidth: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  searchSection: {
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    height: 40,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+  },
+  searchIcon: {
+    marginLeft: 10,
+  },
+  filterSection: {
+    marginBottom: 15,
+  },
+  filterScroll: {
+    paddingHorizontal: 20,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: 10,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  listContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 100,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 30,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 15,
+  },
+  card: {
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 15,
+    borderWidth: 1,
+  },
+  cardImage: {
+    width: "100%",
+    height: 150,
+    resizeMode: "cover",
+  },
+  noImageContainer: {
+    width: "100%",
+    height: 150,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cardContent: {
+    padding: 15,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  itemName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    flex: 1,
+    marginRight: 10,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  badgeLost: {
+    backgroundColor: "#FFEFEF",
+  },
+  badgeFound: {
+    backgroundColor: "#EFFFF4",
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#000000",
+  },
+  itemCategory: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: "500",
+    marginBottom: 10,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  locationText: {
+    fontSize: 14,
+    marginLeft: 5,
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  dateText: {
+    fontSize: 12,
+    marginLeft: 5,
+  },
+});

@@ -81,29 +81,46 @@ export default function Report() {
       setImageUri(result.assets[0].uri);
     }
   };
-
+  const [isLoading, setIsLoading] = useState(false);
   const handleSubmit = async () => {
+    // Validasi input
+    if (!itemName || !category || !building || !floor) {
+      alert("Mohon lengkapi semua field yang diwajibkan."); // Menggunakan alert() standar web sebagai fallback
+      return;
+    }
+
+    setIsLoading(true); // Ubah status tombol menjadi loading
+    console.log("1. Memulai proses submit...");
+
     try {
       let finalImageUrl = null;
 
+      // Proses upload gambar jika ada
       if (imageUri) {
+        console.log("2. Memproses gambar...");
         const response = await fetch(imageUri);
         const blob = await response.blob();
         const fileName = `public/${Date.now()}.jpg`;
 
+        console.log("3. Mengunggah gambar ke Supabase Storage...");
         const { data, error } = await supabase.storage
           .from("item-images")
           .upload(fileName, blob);
 
-        if (error) throw error;
+        if (error) {
+          console.error("Error Storage:", error);
+          throw new Error(`Gagal unggah foto: ${error.message}`);
+        }
 
         const { data: publicUrlData } = supabase.storage
           .from("item-images")
           .getPublicUrl(fileName);
 
         finalImageUrl = publicUrlData.publicUrl;
+        console.log("4. URL Gambar didapatkan:", finalImageUrl);
       }
 
+      console.log("5. Menyimpan data ke tabel PostgreSQL...");
       const { error: insertError } = await supabase.from("items").insert([
         {
           type: reportType,
@@ -116,12 +133,19 @@ export default function Report() {
         },
       ]);
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Error Database:", insertError);
+        throw new Error(`Gagal simpan data: ${insertError.message}`);
+      }
 
-      console.log("Berhasil disimpan ke Supabase!");
+      console.log("6. Berhasil!");
+      alert("Laporan berhasil disimpan ke basis data!"); // Fallback alert
       router.back();
-    } catch (error) {
-      console.error("Gagal submit:", error);
+    } catch (error: any) {
+      console.error("PROSES GAGAL:", error);
+      alert(`Terjadi kesalahan:\n${error.message}`);
+    } finally {
+      setIsLoading(false); // Kembalikan tombol ke keadaan semula
     }
   };
 
@@ -386,8 +410,14 @@ export default function Report() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-          <Text style={styles.submitBtnText}>Submit Laporan</Text>
+        <TouchableOpacity
+          style={[styles.submitBtn, isLoading && { opacity: 0.7 }]}
+          onPress={handleSubmit}
+          disabled={isLoading} // Tombol tidak bisa di-spam klik saat loading
+        >
+          <Text style={styles.submitBtnText}>
+            {isLoading ? "Mengirim Data..." : "Submit Laporan"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
