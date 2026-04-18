@@ -1,98 +1,285 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useState } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { darkTheme, lightTheme } from "../../constants/Colors";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function Home() {
+  const [activeTab, setActiveTab] = useState("lost");
+  const [isDark, setIsDark] = useState(false);
 
-export default function HomeScreen() {
+  const currentTheme = isDark ? darkTheme : lightTheme;
+  const styles = getStyles(currentTheme);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>LOST N FOUND</Text>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity onPress={() => setIsDark(!isDark)}>
+            <Ionicons
+              name={isDark ? "sunny-outline" : "moon-outline"}
+              size={24}
+              color={currentTheme.primaryText}
+              style={styles.iconMargin}
             />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+          </TouchableOpacity>
+          <Ionicons
+            name="bar-chart-outline"
+            size={24}
+            color={currentTheme.primaryText}
+            style={styles.iconMargin}
+          />
+          <Ionicons
+            name="notifications-outline"
+            size={24}
+            color={currentTheme.primaryText}
+          />
+        </View>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <View style={styles.topTabs}>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            activeTab === "lost" && styles.activeTabButton,
+          ]}
+          onPress={() => setActiveTab("lost")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "lost" && styles.activeTabText,
+            ]}
+          >
+            Lost Items
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            activeTab === "found" && styles.activeTabButton,
+          ]}
+          onPress={() => setActiveTab("found")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "found" && styles.activeTabText,
+            ]}
+          >
+            Found Items
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content}>
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search lost item"
+            placeholderTextColor={currentTheme.textMuted}
+          />
+          <Ionicons name="search" size={20} color={currentTheme.textMuted} />
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterContainer}
+        >
+          <TouchableOpacity style={styles.filterChipActive}>
+            <Text style={styles.filterChipTextActive}>Semua</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterChip}>
+            <Text style={styles.filterChipText}>Gedung C</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterChip}>
+            <Text style={styles.filterChipText}>Gedung D</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterChip}>
+            <Text style={styles.filterChipText}>Gedung B</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        <View style={styles.card}>
+          <View style={styles.imagePlaceholder}>
+            <Ionicons
+              name="image-outline"
+              size={48}
+              color={currentTheme.iconPlaceholder}
+            />
+          </View>
+          <View style={styles.cardDetails}>
+            <Text style={styles.cardTitle}>Barang Hilang A</Text>
+            <View style={styles.locationRow}>
+              <Ionicons
+                name="location-outline"
+                size={16}
+                color={currentTheme.textSecondary}
+              />
+              <Text style={styles.locationText}>Gedung C</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.imagePlaceholder}>
+            <Ionicons
+              name="image-outline"
+              size={48}
+              color={currentTheme.iconPlaceholder}
+            />
+          </View>
+          <View style={styles.cardDetails}>
+            <Text style={styles.cardTitle}>Barang Hilang B</Text>
+            <View style={styles.locationRow}>
+              <Ionicons
+                name="location-outline"
+                size={16}
+                color={currentTheme.textSecondary}
+              />
+              <Text style={styles.locationText}>Gedung D</Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
+const getStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      backgroundColor: theme.primary,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingVertical: 15,
+    },
+    headerTitle: {
+      color: theme.primaryText,
+      fontSize: 18,
+      fontWeight: "bold",
+    },
+    headerIcons: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    iconMargin: {
+      marginRight: 15,
+    },
+    topTabs: {
+      flexDirection: "row",
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    tabButton: {
+      flex: 1,
+      paddingVertical: 15,
+      alignItems: "center",
+    },
+    activeTabButton: {
+      borderBottomWidth: 2,
+      borderBottomColor: theme.borderActive,
+    },
+    tabText: {
+      fontSize: 16,
+      color: theme.textSecondary,
+    },
+    activeTabText: {
+      fontWeight: "bold",
+      color: theme.textMain,
+    },
+    content: {
+      flex: 1,
+      padding: 20,
+    },
+    searchContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.cardBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 25,
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      marginBottom: 15,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 16,
+      color: theme.textMain,
+    },
+    filterContainer: {
+      flexDirection: "row",
+      marginBottom: 20,
+    },
+    filterChipActive: {
+      backgroundColor: theme.chipActive,
+      paddingHorizontal: 15,
+      paddingVertical: 8,
+      borderRadius: 20,
+      marginRight: 10,
+    },
+    filterChipTextActive: {
+      color: theme.textMain,
+      fontWeight: "bold",
+    },
+    filterChip: {
+      backgroundColor: theme.cardBackground,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 15,
+      paddingVertical: 8,
+      borderRadius: 20,
+      marginRight: 10,
+    },
+    filterChipText: {
+      color: theme.textSecondary,
+    },
+    card: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      marginBottom: 20,
+      overflow: "hidden",
+    },
+    imagePlaceholder: {
+      height: 180,
+      backgroundColor: theme.background,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    cardDetails: {
+      padding: 15,
+      backgroundColor: theme.cardBackground,
+    },
+    cardTitle: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: theme.textMain,
+      marginBottom: 5,
+    },
+    locationRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    locationText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginLeft: 5,
+    },
+  });
