@@ -16,19 +16,17 @@ import {
   View,
 } from "react-native";
 import { Colors } from "../constants/Colors";
+import { supabase } from "../lib/supabase";
 
 export default function Report() {
   const [reportType, setReportType] = useState<"lost" | "found">("lost");
+  const [itemName, setItemName] = useState("");
+  const [description, setDescription] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
-
-  // State Kategori
   const [category, setCategory] = useState("");
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
-
-  // State Lokasi
   const [building, setBuilding] = useState("");
   const [isBuildingModalVisible, setBuildingModalVisible] = useState(false);
-
   const [floor, setFloor] = useState("");
   const [isFloorModalVisible, setFloorModalVisible] = useState(false);
 
@@ -41,10 +39,8 @@ export default function Report() {
   ];
   const buildings = ["Gedung A", "Gedung B", "Gedung C", "Gedung D"];
 
-  // Fungsi dinamis untuk mendapatkan jumlah lantai
   const getDynamicFloors = (selectedBuilding: string) => {
     let maxFloors = 0;
-
     switch (selectedBuilding) {
       case "Gedung A":
         maxFloors = 9;
@@ -64,7 +60,6 @@ export default function Report() {
 
     const availableFloors = [];
     for (let i = 1; i <= maxFloors; i++) {
-      // Lewati lantai 4 dan 13
       if (i !== 4 && i !== 13) {
         availableFloors.push(`Lantai ${i}`);
       }
@@ -72,7 +67,6 @@ export default function Report() {
     return availableFloors;
   };
 
-  // Panggil fungsi setiap kali render, akan kosong jika gedung belum dipilih
   const floors = getDynamicFloors(building);
 
   const pickImage = async () => {
@@ -88,11 +82,49 @@ export default function Report() {
     }
   };
 
-  const handleSubmit = () => {
-    router.back();
+  const handleSubmit = async () => {
+    try {
+      let finalImageUrl = null;
+
+      if (imageUri) {
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        const fileName = `public/${Date.now()}.jpg`;
+
+        const { data, error } = await supabase.storage
+          .from("item-images")
+          .upload(fileName, blob);
+
+        if (error) throw error;
+
+        const { data: publicUrlData } = supabase.storage
+          .from("item-images")
+          .getPublicUrl(fileName);
+
+        finalImageUrl = publicUrlData.publicUrl;
+      }
+
+      const { error: insertError } = await supabase.from("items").insert([
+        {
+          type: reportType,
+          name: itemName,
+          category: category,
+          building: building,
+          floor: floor,
+          description: description,
+          image_url: finalImageUrl,
+        },
+      ]);
+
+      if (insertError) throw insertError;
+
+      console.log("Berhasil disimpan ke Supabase!");
+      router.back();
+    } catch (error) {
+      console.error("Gagal submit:", error);
+    }
   };
 
-  // Komponen Helper untuk Dropdown Modal
   const DropdownModal = ({
     visible,
     data,
@@ -111,7 +143,6 @@ export default function Report() {
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback>
             <View style={[styles.modalContent, { maxHeight: "60%" }]}>
-              {/* Tambahkan ScrollView jika lantainya sangat banyak seperti Gedung D */}
               <ScrollView showsVerticalScrollIndicator={false}>
                 {data.map((item, index) => (
                   <TouchableOpacity
@@ -199,10 +230,11 @@ export default function Report() {
             style={styles.input}
             placeholder="Contoh: Kunci Motor, Dompet Hitam"
             placeholderTextColor={Colors.textMuted}
+            value={itemName}
+            onChangeText={setItemName}
           />
         </View>
 
-        {/* --- Dropdown Kategori --- */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Kategori</Text>
           <TouchableOpacity
@@ -228,12 +260,10 @@ export default function Report() {
           </TouchableOpacity>
         </View>
 
-        {/* --- Bagian Lokasi --- */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Lokasi Terakhir / Ditemukan</Text>
 
           <View style={styles.locationRow}>
-            {/* Pemilih Gedung */}
             <View style={{ flex: 1, marginRight: 5 }}>
               <TouchableOpacity
                 style={[
@@ -258,7 +288,6 @@ export default function Report() {
               </TouchableOpacity>
             </View>
 
-            {/* Pemilih Lantai Dinamis */}
             <View style={{ flex: 1, marginLeft: 5 }}>
               <TouchableOpacity
                 style={[
@@ -286,7 +315,6 @@ export default function Report() {
             </View>
           </View>
 
-          {/* Tombol Peta */}
           <TouchableOpacity
             style={[
               styles.mapButtonFull,
@@ -333,6 +361,8 @@ export default function Report() {
             multiline={true}
             numberOfLines={4}
             textAlignVertical="top"
+            value={description}
+            onChangeText={setDescription}
           />
         </View>
 
@@ -361,7 +391,6 @@ export default function Report() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Render Modals */}
       <DropdownModal
         visible={isCategoryModalVisible}
         data={categories}
@@ -379,11 +408,10 @@ export default function Report() {
         onSelect={(item) => {
           setBuilding(item);
           setBuildingModalVisible(false);
-          setFloor(""); // Sangat penting: Reset lantai saat gedung diganti
+          setFloor("");
         }}
         onClose={() => setBuildingModalVisible(false)}
       />
-      {/* Modal lantai sekarang menerima data yang di-generate dinamis */}
       <DropdownModal
         visible={isFloorModalVisible}
         data={floors}
