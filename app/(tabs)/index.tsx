@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+// Perhatikan: SafeAreaView TIDAK LAGI di-import di sini
 import { Colors } from "../../constants/Colors";
 import { useAppContext } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
@@ -182,10 +182,12 @@ export default function Home() {
   );
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: Colors.primary }]}
-    >
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+    // DI SINI PERUBAHANNYA: Menggunakan View standar, bukan SafeAreaView
+    <View style={styles.container}>
+      <StatusBar
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
+        backgroundColor={currentTheme.background}
+      />
 
       <View
         style={[styles.container, { backgroundColor: currentTheme.background }]}
@@ -347,14 +349,11 @@ export default function Home() {
           />
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
   container: {
     flex: 1,
   },
@@ -363,7 +362,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 12, // DI SINI: Padding dirampingkan
     backgroundColor: Colors.primary,
   },
   topHeaderTitle: {
