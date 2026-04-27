@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -34,6 +35,13 @@ export default function Report() {
   const [floor, setFloor] = useState("");
   const [isFloorModalVisible, setFloorModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
+  const [mapCoordinate, setMapCoordinate] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
 
   const { currentTheme } = useAppContext();
 
@@ -64,7 +72,6 @@ export default function Report() {
       default:
         return [];
     }
-
     const availableFloors = [];
     for (let i = 1; i <= maxFloors; i++) {
       if (i !== 4 && i !== 13) availableFloors.push(`Lantai ${i}`);
@@ -81,46 +88,68 @@ export default function Report() {
       aspect: [4, 3],
       quality: 0.8,
     });
-
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
     }
   };
 
+  const handleMapPress = (event: any) => {
+    const rawX = event.nativeEvent.offsetX ?? event.nativeEvent.locationX;
+    const rawY = event.nativeEvent.offsetY ?? event.nativeEvent.locationY;
+
+    if (mapSize.width > 0 && mapSize.height > 0) {
+      const percentX = Math.max(0, Math.min(1, rawX / mapSize.width));
+      const percentY = Math.max(0, Math.min(1, rawY / mapSize.height));
+      setMapCoordinate({ x: percentX, y: percentY });
+    }
+  };
+
+  const getMapImageUrl = () => {
+    if (!building || !floor)
+      return "https://placehold.co/800x1200/png?text=Peta+Tidak+Tersedia";
+    const formattedBuilding = building.toLowerCase().replace(/\s+/g, "-");
+    const formattedFloor = floor.toLowerCase().replace(/\s+/g, "-");
+    const fileName = `${formattedBuilding}-${formattedFloor}.jpg`;
+    const { data } = supabase.storage.from("floor-maps").getPublicUrl(fileName);
+    return data.publicUrl;
+  };
+
   const handleSubmit = async () => {
     if (!itemName || !category || !building || !floor) {
-      Alert.alert("Validasi", "Mohon lengkapi semua field yang diwajibkan.");
+      if (Platform.OS === "web") {
+        window.alert("Validasi: Mohon lengkapi semua field yang diwajibkan.");
+      } else {
+        Alert.alert("Validasi", "Mohon lengkapi semua field yang diwajibkan.");
+      }
       return;
     }
-
     setIsLoading(true);
-
     try {
       let finalImageUrl = null;
-
       if (imageUri) {
         const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpeg";
         const fileName = `public/${Date.now()}.${fileExt}`;
         const mimeType = fileExt === "png" ? "image/png" : "image/jpeg";
-
-        const file = new File(imageUri);
-        const base64 = await file.base64();
-
+        let fileData;
+        if (Platform.OS === "web") {
+          const response = await fetch(imageUri);
+          fileData = await response.blob();
+        } else {
+          const file = new File(imageUri);
+          const base64 = await file.base64();
+          fileData = decode(base64);
+        }
         const { data, error } = await supabase.storage
           .from("item-images")
-          .upload(fileName, decode(base64), {
+          .upload(fileName, fileData, {
             contentType: mimeType,
           });
-
         if (error) throw new Error(`Gagal unggah foto: ${error.message}`);
-
         const { data: publicUrlData } = supabase.storage
           .from("item-images")
           .getPublicUrl(fileName);
-
         finalImageUrl = publicUrlData.publicUrl;
       }
-
       const { error: insertError } = await supabase.from("items").insert([
         {
           type: reportType,
@@ -130,18 +159,27 @@ export default function Report() {
           floor: floor,
           description: description,
           image_url: finalImageUrl,
+          map_x: mapCoordinate?.x || null,
+          map_y: mapCoordinate?.y || null,
         },
       ]);
-
       if (insertError)
         throw new Error(`Gagal simpan data: ${insertError.message}`);
-
-      Alert.alert("Sukses", "Laporan berhasil disimpan ke basis data.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      if (Platform.OS === "web") {
+        window.alert("Sukses: Laporan berhasil disimpan ke basis data.");
+        router.back();
+      } else {
+        Alert.alert("Sukses", "Laporan berhasil disimpan ke basis data.", [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      }
     } catch (error: any) {
       console.error("PROSES GAGAL:", error);
-      Alert.alert("Gagal", `Terjadi kesalahan:\n${error.message}`);
+      if (Platform.OS === "web") {
+        window.alert(`Gagal: Terjadi kesalahan:\n${error.message}`);
+      } else {
+        Alert.alert("Gagal", `Terjadi kesalahan:\n${error.message}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -364,7 +402,10 @@ export default function Report() {
                     !building && { opacity: 0.5 },
                   ]}
                   disabled={!building}
-                  onPress={() => setFloorModalVisible(true)}
+                  onPress={() => {
+                    setFloorModalVisible(true);
+                    setMapCoordinate(null);
+                  }}
                 >
                   <Text
                     style={[
@@ -394,6 +435,7 @@ export default function Report() {
                 },
               ]}
               disabled={!building || !floor}
+              onPress={() => setIsMapModalVisible(true)}
             >
               <Ionicons
                 name="map-outline"
@@ -413,18 +455,26 @@ export default function Report() {
                     : null,
                 ]}
               >
-                Tandai di Peta...
+                {mapCoordinate ? "Ubah Titik Lokasi..." : "Tandai di Peta..."}
               </Text>
               <View style={{ flex: 1 }} />
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={
-                  building && floor
-                    ? Colors.primary
-                    : currentTheme.textSecondary
-                }
-              />
+              {mapCoordinate ? (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={24}
+                  color={Colors.primary}
+                />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={
+                    building && floor
+                      ? Colors.primary
+                      : currentTheme.textSecondary
+                  }
+                />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -517,6 +567,7 @@ export default function Report() {
             setBuilding(item);
             setBuildingModalVisible(false);
             setFloor("");
+            setMapCoordinate(null);
           }}
           onClose={() => setBuildingModalVisible(false)}
         />
@@ -527,9 +578,106 @@ export default function Report() {
           onSelect={(item: string) => {
             setFloor(item);
             setFloorModalVisible(false);
+            setMapCoordinate(null);
           }}
           onClose={() => setFloorModalVisible(false)}
         />
+
+        <Modal visible={isMapModalVisible} animationType="slide">
+          <View
+            style={[
+              styles.mapModalContainer,
+              { backgroundColor: currentTheme.background },
+            ]}
+          >
+            <View
+              style={[
+                styles.mapModalHeader,
+                { borderBottomColor: currentTheme.border },
+              ]}
+            >
+              <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
+                <Ionicons
+                  name="close"
+                  size={28}
+                  color={currentTheme.textMain}
+                />
+              </TouchableOpacity>
+              <Text
+                style={[styles.mapModalTitle, { color: currentTheme.textMain }]}
+              >
+                Titik Lokasi - {building} {floor}
+              </Text>
+              <View style={{ width: 28 }} />
+            </View>
+
+            <View style={styles.mapContainer}>
+              <View
+                style={[
+                  styles.mapAspectWrapper,
+                  { backgroundColor: currentTheme.background },
+                ]}
+              >
+                <Pressable
+                  style={styles.mapPressable}
+                  onLayout={(e) =>
+                    setMapSize({
+                      width: e.nativeEvent.layout.width,
+                      height: e.nativeEvent.layout.height,
+                    })
+                  }
+                  onPress={handleMapPress}
+                >
+                  <Image
+                    source={{ uri: getMapImageUrl() }}
+                    style={styles.mapImage}
+                  />
+                  {mapCoordinate && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.pinContainer,
+                        {
+                          left: `${mapCoordinate.x * 100}%`,
+                          top: `${mapCoordinate.y * 100}%`,
+                          transform: [{ translateX: -24 }, { translateY: -48 }],
+                        },
+                      ]}
+                    >
+                      <Ionicons name="location" size={48} color="#FF3B30" />
+                    </View>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.mapModalFooter,
+                {
+                  borderTopColor: currentTheme.border,
+                  backgroundColor: currentTheme.cardBackground,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.mapInstruction,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
+                Ketuk pada denah untuk meletakkan pin lokasi.
+              </Text>
+              <TouchableOpacity
+                style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]}
+                disabled={!mapCoordinate}
+                onPress={() => setIsMapModalVisible(false)}
+              >
+                <Text style={styles.mapSaveBtnText}>Simpan Titik</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </View>
   );
@@ -639,4 +787,40 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   submitBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+
+  mapModalContainer: { flex: 1 },
+  mapModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    paddingTop: Platform.OS === "ios" ? 50 : 20,
+    borderBottomWidth: 1,
+  },
+  mapModalTitle: { fontSize: 18, fontWeight: "bold" },
+  mapContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#EAEAEA",
+  },
+  mapAspectWrapper: {
+    width: "100%",
+    aspectRatio: 1,
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 8,
+  },
+  mapPressable: { flex: 1, position: "relative" },
+  mapImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  pinContainer: { position: "absolute", zIndex: 10 },
+  mapModalFooter: { padding: 20, borderTopWidth: 1 },
+  mapInstruction: { textAlign: "center", marginBottom: 15, fontSize: 14 },
+  mapSaveBtn: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  mapSaveBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
 });

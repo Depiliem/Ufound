@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,7 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-// Perhatikan: SafeAreaView TIDAK LAGI di-import di sini
 import { Colors } from "../../constants/Colors";
 import { useAppContext } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
@@ -36,7 +35,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<"lost" | "found">("lost");
-
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBuilding, setSelectedBuilding] = useState("Semua");
 
@@ -58,14 +56,9 @@ export default function Home() {
         .eq("type", activeTab)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching items:", error);
-        return;
-      }
-
+      if (error) return;
       setItems(data || []);
     } catch (error) {
-      console.error("Gagal memuat data:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -112,6 +105,7 @@ export default function Home() {
           borderColor: currentTheme.border,
         },
       ]}
+      onPress={() => router.push(`./detail/${item.id}`)}
     >
       {item.image_url ? (
         <Image source={{ uri: item.image_url }} style={styles.cardImage} />
@@ -182,13 +176,11 @@ export default function Home() {
   );
 
   return (
-    // DI SINI PERUBAHANNYA: Menggunakan View standar, bukan SafeAreaView
     <View style={styles.container}>
       <StatusBar
         barStyle={isDarkMode ? "light-content" : "dark-content"}
         backgroundColor={currentTheme.background}
       />
-
       <View
         style={[styles.container, { backgroundColor: currentTheme.background }]}
       >
@@ -329,7 +321,7 @@ export default function Home() {
             <Text
               style={[styles.emptyText, { color: currentTheme.textSecondary }]}
             >
-              Tidak ada data yang sesuai dengan pencarian Anda.
+              Tidak ada data yang sesuai.
             </Text>
           </View>
         ) : (
@@ -354,15 +346,13 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 12, // DI SINI: Padding dirampingkan
+    paddingVertical: 12,
     backgroundColor: Colors.primary,
   },
   topHeaderTitle: {
@@ -371,13 +361,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     letterSpacing: 1,
   },
-  headerIcons: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconButton: {
-    marginLeft: 15,
-  },
+  headerIcons: { flexDirection: "row", alignItems: "center" },
+  iconButton: { marginLeft: 15 },
   tabContainer: {
     flexDirection: "row",
     paddingHorizontal: 20,
@@ -389,14 +374,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 2,
   },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  searchSection: {
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
+  tabText: { fontSize: 14, fontWeight: "600" },
+  searchSection: { paddingHorizontal: 20, marginBottom: 10 },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -405,19 +384,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     height: 40,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-  },
-  searchIcon: {
-    marginLeft: 10,
-  },
-  filterSection: {
-    marginBottom: 15,
-  },
-  filterScroll: {
-    paddingHorizontal: 20,
-  },
+  searchInput: { flex: 1, fontSize: 14 },
+  searchIcon: { marginLeft: 10 },
+  filterSection: { marginBottom: 15 },
+  filterScroll: { paddingHorizontal: 20 },
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 6,
@@ -425,94 +395,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginRight: 10,
   },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  listContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
+  filterChipText: { fontSize: 12, fontWeight: "500" },
+  listContainer: { paddingHorizontal: 20, paddingBottom: 100 },
   centerContent: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 30,
   },
-  emptyText: {
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 15,
-  },
+  emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
   card: {
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 15,
     borderWidth: 1,
   },
-  cardImage: {
-    width: "100%",
-    height: 150,
-    resizeMode: "cover",
-  },
+  cardImage: { width: "100%", height: 150, resizeMode: "cover" },
   noImageContainer: {
     width: "100%",
     height: 150,
     justifyContent: "center",
     alignItems: "center",
   },
-  cardContent: {
-    padding: 15,
-  },
+  cardContent: { padding: 15 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 5,
   },
-  itemName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    flex: 1,
-    marginRight: 10,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  badgeLost: {
-    backgroundColor: "#FFEFEF",
-  },
-  badgeFound: {
-    backgroundColor: "#EFFFF4",
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#000000",
-  },
+  itemName: { fontSize: 18, fontWeight: "bold", flex: 1, marginRight: 10 },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  badgeLost: { backgroundColor: "#FFEFEF" },
+  badgeFound: { backgroundColor: "#EFFFF4" },
+  badgeText: { fontSize: 12, fontWeight: "bold", color: "#000000" },
   itemCategory: {
     fontSize: 14,
     color: Colors.primary,
     fontWeight: "500",
     marginBottom: 10,
   },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  locationText: {
-    fontSize: 14,
-    marginLeft: 5,
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  dateText: {
-    fontSize: 12,
-    marginLeft: 5,
-  },
+  locationRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  locationText: { fontSize: 14, marginLeft: 5 },
+  dateRow: { flexDirection: "row", alignItems: "center" },
+  dateText: { fontSize: 12, marginLeft: 5 },
 });
