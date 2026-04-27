@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode } from "base64-arraybuffer";
 import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
@@ -6,6 +7,7 @@ import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Dimensions,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -42,6 +44,7 @@ export default function Report() {
     y: number;
   } | null>(null);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
+  const [isMinimized, setIsMinimized] = useState(false);
 
   const { currentTheme } = useAppContext();
 
@@ -114,18 +117,28 @@ export default function Report() {
     return data.publicUrl;
   };
 
+  // Generator UUID Client-Side Absolut
+  const generateUUID = () => {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      /[xy]/g,
+      function (c) {
+        const r = (Math.random() * 16) | 0,
+          v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      },
+    );
+  };
+
   const handleSubmit = async () => {
     if (!itemName || !category || !building || !floor) {
-      if (Platform.OS === "web") {
-        window.alert("Validasi: Mohon lengkapi semua field yang diwajibkan.");
-      } else {
-        Alert.alert("Validasi", "Mohon lengkapi semua field yang diwajibkan.");
-      }
+      Alert.alert("Validasi", "Mohon lengkapi semua field yang diwajibkan.");
       return;
     }
     setIsLoading(true);
     try {
+      const newItemId = generateUUID(); // Buat ID secara mandiri
       let finalImageUrl = null;
+
       if (imageUri) {
         const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpeg";
         const fileName = `public/${Date.now()}.${fileExt}`;
@@ -139,19 +152,18 @@ export default function Report() {
           const base64 = await file.base64();
           fileData = decode(base64);
         }
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
           .from("item-images")
-          .upload(fileName, fileData, {
-            contentType: mimeType,
-          });
+          .upload(fileName, fileData, { contentType: mimeType });
         if (error) throw new Error(`Gagal unggah foto: ${error.message}`);
-        const { data: publicUrlData } = supabase.storage
+        finalImageUrl = supabase.storage
           .from("item-images")
-          .getPublicUrl(fileName);
-        finalImageUrl = publicUrlData.publicUrl;
+          .getPublicUrl(fileName).data.publicUrl;
       }
+
       const { error: insertError } = await supabase.from("items").insert([
         {
+          id: newItemId, // Pasang ID buatan sendiri ke Supabase
           type: reportType,
           name: itemName,
           category: category,
@@ -162,24 +174,32 @@ export default function Report() {
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
         },
-      ]);
+      ]); // Tidak perlu .select() lagi!
+
       if (insertError)
         throw new Error(`Gagal simpan data: ${insertError.message}`);
-      if (Platform.OS === "web") {
-        window.alert("Sukses: Laporan berhasil disimpan ke basis data.");
-        router.back();
-      } else {
-        Alert.alert("Sukses", "Laporan berhasil disimpan ke basis data.", [
-          { text: "OK", onPress: () => router.back() },
-        ]);
+
+      // Eksekusi mutlak penyimpanan lokal jika tipe = lost
+      if (reportType === "lost") {
+        const storedIds = await AsyncStorage.getItem("my_reports");
+        let idsArray: string[] = [];
+        try {
+          idsArray = storedIds ? JSON.parse(storedIds) : [];
+          if (!Array.isArray(idsArray)) idsArray = [];
+        } catch (e) {
+          idsArray = [];
+        }
+        idsArray.push(newItemId);
+        await AsyncStorage.setItem("my_reports", JSON.stringify(idsArray));
+        console.log("ID TERSIMPAN DI LOKAL:", newItemId); // Untuk cek di Terminal
       }
+
+      Alert.alert("Sukses", "Laporan berhasil disimpan.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     } catch (error: any) {
-      console.error("PROSES GAGAL:", error);
-      if (Platform.OS === "web") {
-        window.alert(`Gagal: Terjadi kesalahan:\n${error.message}`);
-      } else {
-        Alert.alert("Gagal", `Terjadi kesalahan:\n${error.message}`);
-      }
+      console.error("GAGAL:", error);
+      Alert.alert("Gagal", error.message);
     } finally {
       setIsLoading(false);
     }
@@ -244,6 +264,10 @@ export default function Report() {
       </TouchableWithoutFeedback>
     </Modal>
   );
+
+  const screenWidth = Dimensions.get("window").width;
+  const minWidth = screenWidth;
+  const minHeight = screenWidth * (900 / 1250);
 
   return (
     <View
@@ -336,15 +360,17 @@ export default function Report() {
                   backgroundColor: currentTheme.cardBackground,
                   borderColor: currentTheme.border,
                 },
-                isCategoryModalVisible && styles.dropdownSelectorActive,
               ]}
               onPress={() => setCategoryModalVisible(true)}
             >
               <Text
                 style={[
                   styles.dropdownText,
-                  { color: currentTheme.textSecondary },
-                  category ? { color: currentTheme.textMain } : null,
+                  {
+                    color: category
+                      ? currentTheme.textMain
+                      : currentTheme.textSecondary,
+                  },
                 ]}
               >
                 {category || "Pilih Kategori..."}
@@ -370,15 +396,17 @@ export default function Report() {
                       backgroundColor: currentTheme.cardBackground,
                       borderColor: currentTheme.border,
                     },
-                    isBuildingModalVisible && styles.dropdownSelectorActive,
                   ]}
                   onPress={() => setBuildingModalVisible(true)}
                 >
                   <Text
                     style={[
                       styles.dropdownText,
-                      { color: currentTheme.textSecondary },
-                      building ? { color: currentTheme.textMain } : null,
+                      {
+                        color: building
+                          ? currentTheme.textMain
+                          : currentTheme.textSecondary,
+                      },
                     ]}
                   >
                     {building || "Gedung..."}
@@ -397,9 +425,8 @@ export default function Report() {
                     {
                       backgroundColor: currentTheme.cardBackground,
                       borderColor: currentTheme.border,
+                      opacity: building ? 1 : 0.5,
                     },
-                    isFloorModalVisible && styles.dropdownSelectorActive,
-                    !building && { opacity: 0.5 },
                   ]}
                   disabled={!building}
                   onPress={() => {
@@ -410,8 +437,11 @@ export default function Report() {
                   <Text
                     style={[
                       styles.dropdownText,
-                      { color: currentTheme.textSecondary },
-                      floor ? { color: currentTheme.textMain } : null,
+                      {
+                        color: floor
+                          ? currentTheme.textMain
+                          : currentTheme.textSecondary,
+                      },
                     ]}
                   >
                     {floor || "Lantai..."}
@@ -428,10 +458,10 @@ export default function Report() {
             <TouchableOpacity
               style={[
                 styles.mapButtonFull,
-                { backgroundColor: currentTheme.cardBackground },
-                (!building || !floor) && {
+                {
+                  backgroundColor: currentTheme.cardBackground,
+                  opacity: building && floor ? 1 : 0.6,
                   borderColor: currentTheme.border,
-                  opacity: 0.6,
                 },
               ]}
               disabled={!building || !floor}
@@ -450,9 +480,12 @@ export default function Report() {
               <Text
                 style={[
                   styles.mapButtonText,
-                  !building || !floor
-                    ? { color: currentTheme.textSecondary }
-                    : null,
+                  {
+                    color:
+                      building && floor
+                        ? Colors.primary
+                        : currentTheme.textSecondary,
+                  },
                 ]}
               >
                 {mapCoordinate ? "Ubah Titik Lokasi..." : "Tandai di Peta..."}
@@ -606,49 +639,82 @@ export default function Report() {
               <Text
                 style={[styles.mapModalTitle, { color: currentTheme.textMain }]}
               >
-                Titik Lokasi - {building} {floor}
+                Titik Lokasi
               </Text>
               <View style={{ width: 28 }} />
             </View>
 
-            <View style={styles.mapContainer}>
-              <View
-                style={[
-                  styles.mapAspectWrapper,
-                  { backgroundColor: currentTheme.background },
-                ]}
+            <View style={styles.mapViewContainer}>
+              <ScrollView
+                horizontal={true}
+                showsHorizontalScrollIndicator={false}
+                bounces={false}
+                contentContainerStyle={{
+                  flexGrow: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
               >
-                <Pressable
-                  style={styles.mapPressable}
-                  onLayout={(e) =>
-                    setMapSize({
-                      width: e.nativeEvent.layout.width,
-                      height: e.nativeEvent.layout.height,
-                    })
-                  }
-                  onPress={handleMapPress}
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                  contentContainerStyle={{
+                    flexGrow: 1,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
                 >
-                  <Image
-                    source={{ uri: getMapImageUrl() }}
-                    style={styles.mapImage}
-                  />
-                  {mapCoordinate && (
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.pinContainer,
-                        {
-                          left: `${mapCoordinate.x * 100}%`,
-                          top: `${mapCoordinate.y * 100}%`,
-                          transform: [{ translateX: -24 }, { translateY: -48 }],
-                        },
-                      ]}
-                    >
-                      <Ionicons name="location" size={48} color="#FF3B30" />
-                    </View>
-                  )}
-                </Pressable>
-              </View>
+                  <Pressable
+                    style={[
+                      styles.mapPressableCanvas,
+                      {
+                        width: isMinimized ? minWidth : 1250,
+                        height: isMinimized ? minHeight : 900,
+                      },
+                    ]}
+                    onLayout={(e) =>
+                      setMapSize({
+                        width: e.nativeEvent.layout.width,
+                        height: e.nativeEvent.layout.height,
+                      })
+                    }
+                    onPress={handleMapPress}
+                  >
+                    <Image
+                      source={{ uri: getMapImageUrl() }}
+                      style={styles.mapImage}
+                    />
+                    {mapCoordinate && (
+                      <View
+                        pointerEvents="none"
+                        style={[
+                          styles.pinContainer,
+                          {
+                            left: `${mapCoordinate.x * 100}%`,
+                            top: `${mapCoordinate.y * 100}%`,
+                            transform: [
+                              { translateX: -24 },
+                              { translateY: -48 },
+                            ],
+                          },
+                        ]}
+                      >
+                        <Ionicons name="location" size={48} color="#FF3B30" />
+                      </View>
+                    )}
+                  </Pressable>
+                </ScrollView>
+              </ScrollView>
+              <TouchableOpacity
+                style={styles.floatingToggleBtn}
+                onPress={() => setIsMinimized(!isMinimized)}
+              >
+                <Ionicons
+                  name={isMinimized ? "expand" : "contract"}
+                  size={28}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
             </View>
 
             <View
@@ -660,14 +726,6 @@ export default function Report() {
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.mapInstruction,
-                  { color: currentTheme.textSecondary },
-                ]}
-              >
-                Ketuk pada denah untuk meletakkan pin lokasi.
-              </Text>
               <TouchableOpacity
                 style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]}
                 disabled={!mapCoordinate}
@@ -724,7 +782,6 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     height: 55,
   },
-  dropdownSelectorActive: { borderColor: Colors.primary },
   dropdownText: { fontSize: 16, flex: 1 },
   modalOverlay: {
     flex: 1,
@@ -736,10 +793,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
     maxHeight: "60%",
   },
   dropdownItem: {
@@ -756,13 +809,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: Colors.primary,
     borderRadius: 8,
     paddingHorizontal: 15,
     paddingVertical: 15,
     height: 55,
   },
-  mapButtonText: { fontSize: 16, color: Colors.primary, fontWeight: "500" },
+  mapButtonText: { fontSize: 16, fontWeight: "500", marginLeft: 10 },
   uploadBox: {
     borderWidth: 2,
     borderStyle: "dashed",
@@ -772,12 +824,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  uploadText: {
-    marginTop: 10,
-    fontSize: 14,
-    textAlign: "center",
-    paddingHorizontal: 20,
-  },
+  uploadText: { marginTop: 10, fontSize: 14, textAlign: "center" },
   previewImage: { width: "100%", height: "100%", resizeMode: "cover" },
   submitBtn: {
     backgroundColor: Colors.primary,
@@ -787,7 +834,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   submitBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
-
   mapModalContainer: { flex: 1 },
   mapModalHeader: {
     flexDirection: "row",
@@ -798,24 +844,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   mapModalTitle: { fontSize: 18, fontWeight: "bold" },
-  mapContainer: {
+  mapViewContainer: {
     flex: 1,
+    backgroundColor: "#EAEAEA",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#EAEAEA",
-  },
-  mapAspectWrapper: {
-    width: "100%",
-    aspectRatio: 1,
     position: "relative",
-    overflow: "hidden",
-    borderRadius: 8,
   },
-  mapPressable: { flex: 1, position: "relative" },
+  mapPressableCanvas: { position: "relative" },
   mapImage: { width: "100%", height: "100%", resizeMode: "cover" },
   pinContainer: { position: "absolute", zIndex: 10 },
   mapModalFooter: { padding: 20, borderTopWidth: 1 },
-  mapInstruction: { textAlign: "center", marginBottom: 15, fontSize: 14 },
   mapSaveBtn: {
     backgroundColor: Colors.primary,
     paddingVertical: 16,
@@ -823,4 +862,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   mapSaveBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+  floatingToggleBtn: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    backgroundColor: Colors.primary,
+    padding: 12,
+    borderRadius: 30,
+    elevation: 5,
+  },
 });

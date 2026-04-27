@@ -38,7 +38,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBuilding, setSelectedBuilding] = useState("Semua");
 
-  const { isDarkMode, toggleTheme, currentTheme } = useAppContext();
+  const { isDarkMode, currentTheme } = useAppContext();
 
   const filterBuildings = [
     "Semua",
@@ -105,7 +105,7 @@ export default function Home() {
           borderColor: currentTheme.border,
         },
       ]}
-      onPress={() => router.push(`./detail/${item.id}`)}
+      onPress={() => router.push(`/detail/${item.id}`)}
     >
       {item.image_url ? (
         <Image source={{ uri: item.image_url }} style={styles.cardImage} />
@@ -187,12 +187,11 @@ export default function Home() {
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
           <View style={styles.headerIcons}>
-            <TouchableOpacity onPress={toggleTheme} style={styles.iconButton}>
-              <Ionicons
-                name={isDarkMode ? "sunny" : "moon"}
-                size={22}
-                color="#FFFFFF"
-              />
+            <TouchableOpacity
+              onPress={() => router.push("./history")}
+              style={styles.iconButton}
+            >
+              <Ionicons name="time" size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton}>
               <Ionicons name="stats-chart" size={22} color="#FFFFFF" />

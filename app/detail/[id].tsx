@@ -2,17 +2,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Modal,
-    Platform,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Colors } from "../../constants/Colors";
 import { useAppContext } from "../../context/AppContext";
@@ -37,6 +38,7 @@ export default function DetailItem() {
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMapVisible, setIsMapVisible] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const { currentTheme } = useAppContext();
 
   useEffect(() => {
@@ -124,6 +126,9 @@ export default function DetailItem() {
   }
 
   const mapUrl = getMapImageUrl();
+  const screenWidth = Dimensions.get("window").width;
+  const minWidth = screenWidth;
+  const minHeight = screenWidth * (900 / 1250);
 
   return (
     <View
@@ -273,29 +278,70 @@ export default function DetailItem() {
 
           <View style={styles.mapViewContainer}>
             {mapUrl && (
-              <View
-                style={[
-                  styles.mapAspectWrapper,
-                  { backgroundColor: currentTheme.background },
-                ]}
-              >
-                <Image
-                  source={{ uri: mapUrl as string }}
-                  style={styles.mapImage}
-                />
-                <View
-                  style={[
-                    styles.pin,
-                    {
-                      left: `${(item.map_x || 0) * 100}%`,
-                      top: `${(item.map_y || 0) * 100}%`,
-                      transform: [{ translateX: -24 }, { translateY: -48 }],
-                    },
-                  ]}
+              <>
+                <ScrollView
+                  horizontal={true}
+                  showsHorizontalScrollIndicator={false}
+                  bounces={false}
+                  contentContainerStyle={{
+                    flexGrow: 1,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
                 >
-                  <Ionicons name="location" size={48} color="#FF3B30" />
-                </View>
-              </View>
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    bounces={false}
+                    contentContainerStyle={{
+                      flexGrow: 1,
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.mapCanvas,
+                        {
+                          width: isMinimized ? minWidth : 1250,
+                          height: isMinimized ? minHeight : 900,
+                        },
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: mapUrl as string }}
+                        style={styles.mapImage}
+                      />
+                      <View
+                        pointerEvents="none"
+                        style={[
+                          styles.pin,
+                          {
+                            left: `${(item.map_x || 0) * 100}%`,
+                            top: `${(item.map_y || 0) * 100}%`,
+                            transform: [
+                              { translateX: -24 },
+                              { translateY: -48 },
+                            ],
+                          },
+                        ]}
+                      >
+                        <Ionicons name="location" size={48} color="#FF3B30" />
+                      </View>
+                    </View>
+                  </ScrollView>
+                </ScrollView>
+
+                <TouchableOpacity
+                  style={styles.floatingToggleBtn}
+                  onPress={() => setIsMinimized(!isMinimized)}
+                >
+                  <Ionicons
+                    name={isMinimized ? "expand" : "contract"}
+                    size={28}
+                    color="#FFFFFF"
+                  />
+                </TouchableOpacity>
+              </>
             )}
           </View>
 
@@ -398,17 +444,12 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: "bold" },
   mapViewContainer: {
     flex: 1,
+    backgroundColor: "#EAEAEA",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#EAEAEA",
-  },
-  mapAspectWrapper: {
-    width: "100%",
-    aspectRatio: 1,
     position: "relative",
-    overflow: "hidden",
-    borderRadius: 8,
   },
+  mapCanvas: { position: "relative" },
   mapImage: { width: "100%", height: "100%", resizeMode: "cover" },
   pin: { position: "absolute", zIndex: 10 },
   modalFooter: {
@@ -429,4 +470,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   closeBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
+  floatingToggleBtn: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    backgroundColor: Colors.primary,
+    padding: 12,
+    borderRadius: 30,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
 });
