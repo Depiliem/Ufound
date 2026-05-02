@@ -117,7 +117,6 @@ export default function Report() {
     return data.publicUrl;
   };
 
-  // Generator UUID Client-Side Absolut
   const generateUUID = () => {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
       /[xy]/g,
@@ -131,12 +130,18 @@ export default function Report() {
 
   const handleSubmit = async () => {
     if (!itemName || !category || !building || !floor) {
-      Alert.alert("Validasi", "Mohon lengkapi semua field yang diwajibkan.");
+      if (Platform.OS === "web") {
+        window.alert("Validasi: Mohon lengkapi semua field yang diwajibkan.");
+      } else {
+        Alert.alert("Validasi", "Mohon lengkapi semua field yang diwajibkan.");
+      }
       return;
     }
+
     setIsLoading(true);
+
     try {
-      const newItemId = generateUUID(); // Buat ID secara mandiri
+      const newItemId = generateUUID();
       let finalImageUrl = null;
 
       if (imageUri) {
@@ -163,7 +168,7 @@ export default function Report() {
 
       const { error: insertError } = await supabase.from("items").insert([
         {
-          id: newItemId, // Pasang ID buatan sendiri ke Supabase
+          id: newItemId,
           type: reportType,
           name: itemName,
           category: category,
@@ -173,13 +178,13 @@ export default function Report() {
           image_url: finalImageUrl,
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
+          status: "pending", // MEMAKSA NILAI DEFAULT AGAR ADMIN TIDAK CRASH
         },
-      ]); // Tidak perlu .select() lagi!
+      ]);
 
       if (insertError)
         throw new Error(`Gagal simpan data: ${insertError.message}`);
 
-      // Eksekusi mutlak penyimpanan lokal jika tipe = lost
       if (reportType === "lost") {
         const storedIds = await AsyncStorage.getItem("my_reports");
         let idsArray: string[] = [];
@@ -191,15 +196,22 @@ export default function Report() {
         }
         idsArray.push(newItemId);
         await AsyncStorage.setItem("my_reports", JSON.stringify(idsArray));
-        console.log("ID TERSIMPAN DI LOKAL:", newItemId); // Untuk cek di Terminal
       }
 
-      Alert.alert("Sukses", "Laporan berhasil disimpan.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      if (Platform.OS === "web") {
+        window.alert("Sukses: Laporan berhasil disimpan.");
+        router.back();
+      } else {
+        Alert.alert("Sukses", "Laporan berhasil disimpan.", [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      }
     } catch (error: any) {
-      console.error("GAGAL:", error);
-      Alert.alert("Gagal", error.message);
+      if (Platform.OS === "web") {
+        window.alert(`Gagal: ${error.message}`);
+      } else {
+        Alert.alert("Gagal", error.message);
+      }
     } finally {
       setIsLoading(false);
     }

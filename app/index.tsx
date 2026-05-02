@@ -11,11 +11,25 @@ export default function Login() {
     router.replace("/(tabs)");
   };
 
+  const handleAdminLogin = () => {
+    router.push("/admin");
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Login SSO</Text>
+
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login sebagai Mahasiswa</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, styles.adminButton]}
+        onPress={handleAdminLogin}
+      >
+        <Text style={[styles.buttonText, styles.adminButtonText]}>
+          Login sebagai Admin
+        </Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -31,7 +45,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 30,
+    marginBottom: 40,
     color: Colors.textMain,
   },
   button: {
@@ -39,12 +53,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 8,
+    marginBottom: 15,
+    width: "80%",
+    alignItems: "center",
+  },
+  adminButton: {
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    borderColor: Colors.primary,
     marginBottom: 40,
   },
   buttonText: {
     color: Colors.primaryText,
     fontSize: 16,
     fontWeight: "bold",
+  },
+  adminButtonText: {
+    color: Colors.primary,
   },
   testContainer: {
     alignItems: "center",

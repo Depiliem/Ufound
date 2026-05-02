@@ -3,15 +3,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
@@ -26,6 +26,7 @@ type Item = {
   building: string;
   floor: string;
   image_url: string | null;
+  status: string | null;
 };
 
 export default function History() {
@@ -37,7 +38,6 @@ export default function History() {
     try {
       setLoading(true);
       const storedIds = await AsyncStorage.getItem("my_reports");
-      console.log("ISI STORAGE DI HP:", storedIds); // Untuk Debugging
 
       if (!storedIds) {
         setMyItems([]);
@@ -48,7 +48,6 @@ export default function History() {
       try {
         idsArray = JSON.parse(storedIds);
       } catch (e) {
-        // Jika file JSON corrupt dari test sebelumnya, bersihkan.
         await AsyncStorage.removeItem("my_reports");
         setMyItems([]);
         return;
@@ -69,7 +68,6 @@ export default function History() {
       if (error) throw error;
       setMyItems(data || []);
     } catch (error) {
-      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -81,90 +79,168 @@ export default function History() {
     }, []),
   );
 
-  const handleDelete = (id: string) => {
-    Alert.alert(
-      "Selesaikan Laporan",
-      "Apakah barang sudah kembali? Laporan akan dihapus permanen.",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Ya, Selesai",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await supabase.from("items").delete().eq("id", id);
-              const storedIds = await AsyncStorage.getItem("my_reports");
-              if (storedIds) {
-                const updatedIds = JSON.parse(storedIds).filter(
-                  (itemId: string) => itemId !== id,
-                );
-                await AsyncStorage.setItem(
-                  "my_reports",
-                  JSON.stringify(updatedIds),
-                );
-              }
-              fetchMyReports();
-            } catch (error) {
-              Alert.alert("Gagal", "Gagal menghapus.");
-            }
-          },
-        },
-      ],
-    );
+  const executeDelete = async (id: string) => {
+    try {
+      await supabase.from("items").delete().eq("id", id);
+      const storedIds = await AsyncStorage.getItem("my_reports");
+      if (storedIds) {
+        const updatedIds = JSON.parse(storedIds).filter(
+          (itemId: string) => itemId !== id,
+        );
+        await AsyncStorage.setItem("my_reports", JSON.stringify(updatedIds));
+      }
+      fetchMyReports();
+    } catch (error) {
+      if (Platform.OS === "web") {
+        window.alert("Gagal memproses permintaan.");
+      } else {
+        Alert.alert("Gagal", "Gagal memproses permintaan.");
+      }
+    }
   };
 
-  const renderItem = ({ item }: { item: Item }) => (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: currentTheme.cardBackground,
-          borderColor: currentTheme.border,
-        },
-      ]}
-    >
-      <TouchableOpacity
-        style={styles.cardWrapper}
-        onPress={() => router.push(`/detail/${item.id}`)}
+  const handleCancelReport = (id: string) => {
+    if (Platform.OS === "web") {
+      const isConfirmed = window.confirm(
+        "Laporan ini belum disetujui. Yakin ingin membatalkan dan menghapusnya dari database?",
+      );
+      if (isConfirmed) executeDelete(id);
+    } else {
+      Alert.alert(
+        "Batalkan Laporan",
+        "Laporan ini belum disetujui. Yakin ingin membatalkan dan menghapusnya dari database?",
+        [
+          { text: "Kembali", style: "cancel" },
+          {
+            text: "Ya, Batalkan",
+            style: "destructive",
+            onPress: () => executeDelete(id),
+          },
+        ],
+      );
+    }
+  };
+
+  const handleMarkAsDone = (id: string) => {
+    if (Platform.OS === "web") {
+      const isConfirmed = window.confirm(
+        "Apakah barang Anda sudah ditemukan? Laporan ini akan ditandai selesai dan dihapus dari database.",
+      );
+      if (isConfirmed) executeDelete(id);
+    } else {
+      Alert.alert(
+        "Selesaikan Laporan",
+        "Apakah barang Anda sudah ditemukan? Laporan ini akan ditandai selesai dan dihapus dari database.",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Ya, Selesai",
+            style: "default",
+            onPress: () => executeDelete(id),
+          },
+        ],
+      );
+    }
+  };
+
+  const getStatusBadge = (status: string | null) => {
+    const safeStatus = status || "pending";
+    switch (safeStatus) {
+      case "approved":
+        return { label: "Posted", color: "#34C759", bgColor: "#EFFFF4" };
+      case "rejected":
+        return { label: "Rejected", color: "#FF3B30", bgColor: "#FFEFEF" };
+      case "pending":
+      default:
+        return {
+          label: "Waiting approval",
+          color: "#FF9500",
+          bgColor: "#FFF9E6",
+        };
+    }
+  };
+
+  const renderItem = ({ item }: { item: Item }) => {
+    const amanStatus = item.status || "pending";
+    const statusInfo = getStatusBadge(amanStatus);
+
+    return (
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}
       >
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-        ) : (
-          <View
-            style={[
-              styles.noImage,
-              { backgroundColor: currentTheme.background },
-            ]}
-          >
-            <Ionicons
-              name="image-outline"
-              size={30}
-              color={currentTheme.textSecondary}
-            />
+        <TouchableOpacity
+          style={styles.cardWrapper}
+          onPress={() => router.push(`/detail/${item.id}`)}
+        >
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+          ) : (
+            <View
+              style={[
+                styles.noImage,
+                { backgroundColor: currentTheme.background },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={30}
+                color={currentTheme.textSecondary}
+              />
+            </View>
+          )}
+          <View style={styles.cardText}>
+            <Text
+              style={[styles.itemName, { color: currentTheme.textMain }]}
+              numberOfLines={1}
+            >
+              {item.name}
+            </Text>
+
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: statusInfo.bgColor },
+              ]}
+            >
+              <Text style={[styles.statusText, { color: statusInfo.color }]}>
+                {statusInfo.label}
+              </Text>
+            </View>
+
+            <Text
+              style={[styles.dateText, { color: currentTheme.textSecondary }]}
+            >
+              {new Date(item.created_at).toLocaleDateString("id-ID")}
+            </Text>
           </View>
+        </TouchableOpacity>
+
+        {amanStatus === "pending" && (
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => handleCancelReport(item.id)}
+          >
+            <Ionicons name="trash-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
         )}
-        <View style={styles.cardText}>
-          <Text
-            style={[styles.itemName, { color: currentTheme.textMain }]}
-            numberOfLines={1}
+
+        {amanStatus === "approved" && (
+          <TouchableOpacity
+            style={styles.doneBtn}
+            onPress={() => handleMarkAsDone(item.id)}
           >
-            {item.name}
-          </Text>
-          <Text
-            style={[styles.dateText, { color: currentTheme.textSecondary }]}
-          >
-            {new Date(item.created_at).toLocaleDateString("id-ID")}
-          </Text>
-        </View>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.resolveBtn}
-        onPress={() => handleDelete(item.id)}
-      >
-        <Text style={styles.resolveText}>Tandai Selesai</Text>
-      </TouchableOpacity>
-    </View>
-  );
+            <Ionicons name="checkmark-done-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View
@@ -179,6 +255,7 @@ export default function History() {
         </Text>
         <View style={{ width: 24 }} />
       </View>
+
       {loading ? (
         <ActivityIndicator
           size="large"
@@ -202,6 +279,7 @@ export default function History() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 20 }}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </View>
@@ -221,28 +299,44 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: "bold" },
   card: {
+    flexDirection: "row",
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 15,
     overflow: "hidden",
+    alignItems: "stretch",
   },
-  cardWrapper: { flexDirection: "row", padding: 15 },
-  cardImage: { width: 60, height: 60, borderRadius: 8, resizeMode: "cover" },
+  cardWrapper: { flex: 1, flexDirection: "row", padding: 15 },
+  cardImage: { width: 65, height: 65, borderRadius: 8, resizeMode: "cover" },
   noImage: {
-    width: 60,
-    height: 60,
+    width: 65,
+    height: 65,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
   cardText: { flex: 1, marginLeft: 15, justifyContent: "center" },
-  itemName: { fontSize: 16, fontWeight: "bold", marginBottom: 5 },
+  itemName: { fontSize: 16, fontWeight: "bold", marginBottom: 6 },
+  statusBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  statusText: { fontSize: 10, fontWeight: "bold" },
   dateText: { fontSize: 12 },
-  resolveBtn: {
-    backgroundColor: Colors.primary,
-    padding: 12,
+  deleteBtn: {
+    backgroundColor: "#FF3B30",
+    width: 60,
+    justifyContent: "center",
     alignItems: "center",
   },
-  resolveText: { color: "#FFFFFF", fontWeight: "bold" },
+  doneBtn: {
+    backgroundColor: "#34C759",
+    width: 60,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 });
