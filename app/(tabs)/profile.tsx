@@ -59,10 +59,6 @@ export default function ProfileScreen() {
 
           <Text style={[styles.profileName, { color: theme.text }]}>{STUDENT_NAME}</Text>
           <Text style={[styles.profileNim, { color: theme.subtext }]}>{STUDENT_NIM}</Text>
-
-          <View style={[styles.nimChip, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}>
-            <Text style={[styles.nimChipText, { color: theme.primary }]}>🎓 Mahasiswa UMN</Text>
-          </View>
         </View>
 
         {/* ── Settings ── */}
@@ -155,7 +151,7 @@ const styles = StyleSheet.create({
       justifyContent: "space-between",
       alignItems: "center",
       paddingHorizontal: 20,
-      paddingVertical: 12, // DI SINI: Padding dirampingkan
+      paddingVertical: 12,
       backgroundColor: Colors.primary,
     },
     topHeaderTitle: {
@@ -202,16 +198,6 @@ const styles = StyleSheet.create({
   profileNim: {
     fontSize: 14,
     marginBottom: 12,
-  },
-  nimChip: {
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  nimChipText: {
-    fontSize: 13,
-    fontWeight: "600",
   },
 
   // Section title

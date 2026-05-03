@@ -8,7 +8,7 @@ export default function Login() {
   const [status, setStatus] = useState<string>("Belum diuji");
 
   const handleLogin = () => {
-    router.replace("/(tabs)");
+    router.replace("/login");
   };
 
   const handleAdminLogin = () => {
