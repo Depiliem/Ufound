@@ -1,24 +1,34 @@
+import { useAppContext } from "@/context/AppContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, router } from "expo-router";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Colors } from "../../constants/Colors";
 
 function CustomTabBarButton({ children, onPress }: any) {
+  const { currentTheme } = useAppContext();
   return (
     <TouchableOpacity style={styles.customButtonContainer} onPress={onPress}>
-      <View style={styles.customButton}>{children}</View>
+      <View style={[styles.customButton,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}>{children}</View>
     </TouchableOpacity>
   );
 }
 
+
+
 export default function TabLayout() {
+  const { currentTheme } = useAppContext();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, , { backgroundColor: currentTheme.cardBackground }],
         tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textSecondary,
+        tabBarInactiveTintColor: currentTheme.textSecondary,
       }}
     >
       <Tabs.Screen

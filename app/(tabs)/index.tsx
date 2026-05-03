@@ -202,13 +202,6 @@ export default function Home() {
             >
               <Text style={styles.adminRouteText}>ADMIN</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => router.replace("/")}
-              style={styles.iconButton}
-            >
-              <Ionicons name="log-out-outline" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
           </View>
         </View>
 
