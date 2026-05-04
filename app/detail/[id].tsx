@@ -30,6 +30,8 @@ type Item = {
   description: string;
   image_url: string | null;
   status: string;
+  map_x: number | null;
+  map_y: number | null;
 };
 
 export default function ItemDetail() {
@@ -37,9 +39,12 @@ export default function ItemDetail() {
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
   const { currentTheme } = useAppContext();
 
   const screenWidth = Dimensions.get("window").width;
+  const mapCanvasWidth = screenWidth - 80;
+  const mapCanvasHeight = mapCanvasWidth * (900 / 1250);
 
   useEffect(() => {
     const fetchItemDetail = async () => {
@@ -73,6 +78,16 @@ export default function ItemDetail() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const getMapImageUrl = (building: string, floor: string) => {
+    if (!building || !floor)
+      return "https://placehold.co/800x1200/png?text=Peta+Tidak+Tersedia";
+    const formattedBuilding = building.toLowerCase().replace(/\s+/g, "-");
+    const formattedFloor = floor.toLowerCase().replace(/\s+/g, "-");
+    const fileName = `${formattedBuilding}-${formattedFloor}.jpg`;
+    const { data } = supabase.storage.from("floor-maps").getPublicUrl(fileName);
+    return data.publicUrl;
   };
 
   const handleContactAction = () => {
@@ -252,6 +267,35 @@ export default function ItemDetail() {
             </View>
           </View>
 
+          {item.building && item.floor && (
+            <TouchableOpacity
+              style={[
+                styles.viewMapBtn,
+                {
+                  borderColor: currentTheme.border,
+                  backgroundColor: currentTheme.cardBackground,
+                },
+              ]}
+              onPress={() => setIsMapModalVisible(true)}
+            >
+              <Ionicons
+                name="map-outline"
+                size={20}
+                color={Colors.primary}
+                style={{ marginRight: 10 }}
+              />
+              <Text style={[styles.viewMapBtnText, { color: Colors.primary }]}>
+                Cek Denah Lokasi
+              </Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={currentTheme.textSecondary}
+              />
+            </TouchableOpacity>
+          )}
+
           <View style={styles.descriptionSection}>
             <Text
               style={[styles.sectionTitle, { color: currentTheme.textMain }]}
@@ -299,13 +343,18 @@ export default function ItemDetail() {
         </TouchableOpacity>
       </View>
 
-      <Modal visible={isFullScreen} transparent={true} animationType="fade">
+      <Modal
+        visible={isFullScreen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsFullScreen(false)}
+      >
         <View style={styles.fullScreenContainer}>
           <TouchableOpacity
             style={styles.closeFullScreenBtn}
             onPress={() => setIsFullScreen(false)}
           >
-            <Ionicons name="close" size={32} color="#FFFFFF" />
+            <Ionicons name="close" size={36} color="#FFFFFF" />
           </TouchableOpacity>
           {item?.image_url && (
             <Image
@@ -313,6 +362,80 @@ export default function ItemDetail() {
               style={styles.fullScreenImage}
             />
           )}
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isMapModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsMapModalVisible(false)}
+      >
+        <View style={styles.mapModalOverlay}>
+          <View
+            style={[
+              styles.mapModalCard,
+              {
+                backgroundColor: currentTheme.cardBackground,
+                borderColor: currentTheme.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.mapModalHeaderCard,
+                { borderBottomColor: currentTheme.border },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.mapModalTitleCard,
+                  { color: currentTheme.textMain },
+                ]}
+              >
+                Denah Lokasi
+              </Text>
+              <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={currentTheme.textMain}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.mapCanvasContainer}>
+              <View
+                style={[
+                  styles.mapPressableCanvas,
+                  { width: mapCanvasWidth, height: mapCanvasHeight },
+                ]}
+              >
+                {item && (
+                  <Image
+                    source={{ uri: getMapImageUrl(item.building, item.floor) }}
+                    style={styles.mapImage}
+                  />
+                )}
+
+                {item?.map_x !== null && item?.map_y !== null && (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.pinContainer,
+                      {
+                        left: `${item.map_x * 100}%`,
+                        top: `${item.map_y * 100}%`,
+                        transform: [{ translateX: -16 }, { translateY: -32 }],
+                      },
+                    ]}
+                  >
+                    <Ionicons name="location" size={32} color="#FF3B30" />
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
@@ -395,7 +518,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.05)",
     padding: 15,
-    marginBottom: 25,
+    marginBottom: 15,
     backgroundColor: "rgba(0,0,0,0.02)",
   },
   infoRow: {
@@ -416,6 +539,15 @@ const styles = StyleSheet.create({
   infoTextContainer: { flex: 1 },
   infoLabel: { fontSize: 12, marginBottom: 4 },
   infoValue: { fontSize: 15, fontWeight: "600" },
+  viewMapBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 25,
+  },
+  viewMapBtnText: { fontSize: 15, fontWeight: "bold" },
   descriptionSection: { marginBottom: 20 },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
   descriptionText: { fontSize: 15, lineHeight: 24 },
@@ -453,12 +585,46 @@ const styles = StyleSheet.create({
   },
   closeFullScreenBtn: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 50 : 40,
+    top: Platform.OS === "ios" ? 60 : 40,
     right: 20,
-    zIndex: 10,
-    padding: 10,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 20,
+    zIndex: 999,
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 30,
   },
   fullScreenImage: { width: "100%", height: "100%", resizeMode: "contain" },
+  mapModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  mapModalCard: {
+    width: "100%",
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  mapModalHeaderCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+  },
+  mapModalTitleCard: { fontSize: 18, fontWeight: "bold" },
+  mapCanvasContainer: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapPressableCanvas: { position: "relative" },
+  mapImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+    borderRadius: 8,
+  },
+  pinContainer: { position: "absolute", zIndex: 10 },
 });
