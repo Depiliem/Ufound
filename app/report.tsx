@@ -175,6 +175,8 @@ export default function Report() {
       }
       return;
     }
+    const raw = await AsyncStorage.getItem("current_user");
+    const currentUser = raw ? JSON.parse(raw) : null;
 
     setIsLoading(true);
 
@@ -217,23 +219,12 @@ export default function Report() {
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
           status: "pending",
+          user_id: currentUser?.id || null,
         },
       ]);
 
       if (insertError)
         throw new Error(`Gagal simpan data: ${insertError.message}`);
-
-      if (reportType === "lost") {
-        const storedIds = await AsyncStorage.getItem("my_reports");
-        let idsArray: string[] = [];
-        try {
-          idsArray = storedIds ? JSON.parse(storedIds) : [];
-        } catch (e) {
-          idsArray = [];
-        }
-        idsArray.push(newItemId);
-        await AsyncStorage.setItem("my_reports", JSON.stringify(idsArray));
-      }
 
       if (Platform.OS === "web") {
         window.alert("Sukses: Laporan berhasil disimpan.");
