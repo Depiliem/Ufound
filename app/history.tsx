@@ -35,7 +35,6 @@ export default function History() {
   const [activeTab, setActiveTab] = useState<"lost" | "found">("lost");
   const { currentTheme } = useAppContext();
 
-
   const fetchMyReports = async () => {
     try {
       setLoading(true);
@@ -202,7 +201,12 @@ export default function History() {
               >
                 {item.name}
               </Text>
-              <View style={[styles.typeBadge, { backgroundColor: typeInfo.bgColor }]}>
+              <View
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: typeInfo.bgColor },
+                ]}
+              >
                 <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
                   {typeInfo.label}
                 </Text>
@@ -268,14 +272,22 @@ export default function History() {
       </View>
 
       {/* Tab Lost / Found */}
-      <View style={[styles.tabContainer, { borderBottomColor: currentTheme.border }]}>
+      <View
+        style={[
+          styles.tabContainer,
+          { borderBottomColor: currentTheme.border },
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.tabButton,
             { borderBottomColor: "transparent" },
             activeTab === "lost" && { borderBottomColor: Colors.primary },
           ]}
-          onPress={() => { setActiveTab("lost"); setLoading(true); }}
+          onPress={() => {
+            setActiveTab("lost");
+            setLoading(true);
+          }}
         >
           <Text
             style={[
@@ -293,7 +305,10 @@ export default function History() {
             { borderBottomColor: "transparent" },
             activeTab === "found" && { borderBottomColor: Colors.primary },
           ]}
-          onPress={() => { setActiveTab("found"); setLoading(true); }}
+          onPress={() => {
+            setActiveTab("found");
+            setLoading(true);
+          }}
         >
           <Text
             style={[
@@ -321,7 +336,8 @@ export default function History() {
             color={currentTheme.iconEmpty}
           />
           <Text style={{ color: currentTheme.textSecondary, marginTop: 10 }}>
-            Belum ada laporan {activeTab === "lost" ? '"Lost Item"' : '"Found Item"'}.
+            Belum ada laporan{" "}
+            {activeTab === "lost" ? '"Lost Item"' : '"Found Item"'}.
           </Text>
         </View>
       ) : (
@@ -367,7 +383,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(0,0,0,0.05)",
   },
