@@ -32,37 +32,33 @@ type Item = {
 export default function History() {
   const [myItems, setMyItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"lost" | "found">("lost");
   const { currentTheme } = useAppContext();
+
 
   const fetchMyReports = async () => {
     try {
       setLoading(true);
-      const storedIds = await AsyncStorage.getItem("my_reports");
 
-      if (!storedIds) {
+      // Ambil user yang sedang login
+      const raw = await AsyncStorage.getItem("current_user");
+      if (!raw) {
         setMyItems([]);
         return;
       }
 
-      let idsArray: string[] = [];
-      try {
-        idsArray = JSON.parse(storedIds);
-      } catch (e) {
-        await AsyncStorage.removeItem("my_reports");
+      const currentUser = JSON.parse(raw);
+      if (!currentUser?.id) {
         setMyItems([]);
         return;
       }
 
-      if (!Array.isArray(idsArray) || idsArray.length === 0) {
-        setMyItems([]);
-        return;
-      }
-
+      // Query items berdasarkan user_id dan type
       const { data, error } = await supabase
         .from("items")
         .select("*")
-        .in("id", idsArray)
-        .eq("type", "lost")
+        .eq("user_id", currentUser.id)
+        .eq("type", activeTab)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -76,19 +72,13 @@ export default function History() {
   useFocusEffect(
     useCallback(() => {
       fetchMyReports();
-    }, []),
+    }, [activeTab]),
   );
 
   const executeDelete = async (id: string) => {
     try {
-      await supabase.from("items").delete().eq("id", id);
-      const storedIds = await AsyncStorage.getItem("my_reports");
-      if (storedIds) {
-        const updatedIds = JSON.parse(storedIds).filter(
-          (itemId: string) => itemId !== id,
-        );
-        await AsyncStorage.setItem("my_reports", JSON.stringify(updatedIds));
-      }
+      const { error } = await supabase.from("items").delete().eq("id", id);
+      if (error) throw error;
       fetchMyReports();
     } catch (error) {
       if (Platform.OS === "web") {
@@ -147,22 +137,32 @@ export default function History() {
     const safeStatus = status || "pending";
     switch (safeStatus) {
       case "approved":
-        return { label: "Posted", color: "#34C759", bgColor: "#EFFFF4" };
+        return { label: "Disetujui", color: "#FFFFFF", bgColor: "#34C759" };
       case "rejected":
-        return { label: "Rejected", color: "#FF3B30", bgColor: "#FFEFEF" };
+        return { label: "Ditolak", color: "#FFFFFF", bgColor: "#FF3B30" };
       case "pending":
       default:
         return {
-          label: "Waiting approval",
-          color: "#FF9500",
-          bgColor: "#FFF9E6",
+          label: "Menunggu Persetujuan",
+          color: "#FFFFFF",
+          bgColor: "#FF9500",
         };
+    }
+  };
+
+  const getTypeBadge = (type: "lost" | "found") => {
+    switch (type) {
+      case "lost":
+        return { label: "Hilang", color: "#FFFFFF", bgColor: "#FF3B30" };
+      case "found":
+        return { label: "Ditemukan", color: "#FFFFFF", bgColor: "#34C759" };
     }
   };
 
   const renderItem = ({ item }: { item: Item }) => {
     const amanStatus = item.status || "pending";
     const statusInfo = getStatusBadge(amanStatus);
+    const typeInfo = getTypeBadge(item.type);
 
     return (
       <View
@@ -195,12 +195,19 @@ export default function History() {
             </View>
           )}
           <View style={styles.cardText}>
-            <Text
-              style={[styles.itemName, { color: currentTheme.textMain }]}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text
+                style={[styles.itemName, { color: currentTheme.textMain }]}
+                numberOfLines={1}
+              >
+                {item.name}
+              </Text>
+              <View style={[styles.typeBadge, { backgroundColor: typeInfo.bgColor }]}>
+                <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
+                  {typeInfo.label}
+                </Text>
+              </View>
+            </View>
 
             <View
               style={[
@@ -221,7 +228,8 @@ export default function History() {
           </View>
         </TouchableOpacity>
 
-        {amanStatus === "pending" && (
+        {/* Lost: pending → bisa dibatalkan */}
+        {item.type === "lost" && amanStatus === "pending" && (
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => handleCancelReport(item.id)}
@@ -230,7 +238,8 @@ export default function History() {
           </TouchableOpacity>
         )}
 
-        {amanStatus === "approved" && (
+        {/* Lost: approved → bisa ditandai selesai */}
+        {item.type === "lost" && amanStatus === "approved" && (
           <TouchableOpacity
             style={styles.doneBtn}
             onPress={() => handleMarkAsDone(item.id)}
@@ -238,6 +247,8 @@ export default function History() {
             <Ionicons name="checkmark-done-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         )}
+
+        {/* Found: tidak ada tombol aksi */}
       </View>
     );
   };
@@ -256,6 +267,46 @@ export default function History() {
         <View style={{ width: 24 }} />
       </View>
 
+      {/* Tab Lost / Found */}
+      <View style={[styles.tabContainer, { borderBottomColor: currentTheme.border }]}>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            { borderBottomColor: "transparent" },
+            activeTab === "lost" && { borderBottomColor: Colors.primary },
+          ]}
+          onPress={() => { setActiveTab("lost"); setLoading(true); }}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: currentTheme.textSecondary },
+              activeTab === "lost" && { color: Colors.primary },
+            ]}
+          >
+            Lost Items
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            { borderBottomColor: "transparent" },
+            activeTab === "found" && { borderBottomColor: Colors.primary },
+          ]}
+          onPress={() => { setActiveTab("found"); setLoading(true); }}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: currentTheme.textSecondary },
+              activeTab === "found" && { color: Colors.primary },
+            ]}
+          >
+            Found Items
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {loading ? (
         <ActivityIndicator
           size="large"
@@ -270,7 +321,7 @@ export default function History() {
             color={currentTheme.iconEmpty}
           />
           <Text style={{ color: currentTheme.textSecondary, marginTop: 10 }}>
-            Belum ada laporan "I Lost an Item".
+            Belum ada laporan {activeTab === "lost" ? '"Lost Item"' : '"Found Item"'}.
           </Text>
         </View>
       ) : (
@@ -287,6 +338,29 @@ export default function History() {
 }
 
 const styles = StyleSheet.create({
+  tabContainer: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderBottomWidth: 2,
+  },
+  tabText: { fontSize: 14, fontWeight: "600" },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+    gap: 8,
+  },
+  typeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  typeBadgeText: { fontSize: 10, fontWeight: "bold" },
   container: { flex: 1 },
   header: {
     flexDirection: "row",
@@ -316,7 +390,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cardText: { flex: 1, marginLeft: 15, justifyContent: "center" },
-  itemName: { fontSize: 16, fontWeight: "bold", marginBottom: 6 },
+  itemName: { fontSize: 16, fontWeight: "bold", flex: 1 },
   statusBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,
@@ -327,13 +401,13 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 10, fontWeight: "bold" },
   dateText: { fontSize: 12 },
   deleteBtn: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#FF3B30",
     width: 60,
     justifyContent: "center",
     alignItems: "center",
   },
   doneBtn: {
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#34C759",
     width: 60,
     justifyContent: "center",
     alignItems: "center",

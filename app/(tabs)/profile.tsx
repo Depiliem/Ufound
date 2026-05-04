@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -13,13 +14,29 @@ import {
 import { Colors } from "../../constants/Colors";
 import { useAppContext } from "../../context/AppContext";
 
-const STUDENT_NAME = "Rifqi Aldino Amin";
-const STUDENT_NIM = "00000093743";
+type UserData = {
+  id: string;
+  name: string;
+  nim: string | null;
+  email: string;
+  role: string;
+};
 const PROFILE_IMAGE = { uri: "https://randomuser.me/api/portraits/men/9.jpg" };
 
 export default function ProfileScreen() {
   const { isDarkMode, toggleTheme, currentTheme } = useAppContext();
   const [isNotif, setIsNotif] = React.useState(true);
+  const [user, setUser] = useState<UserData | null>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const raw = await AsyncStorage.getItem("current_user");
+        if (raw) setUser(JSON.parse(raw));
+      } catch {}
+    };
+    loadUser();
+  }, []);
 
   // Map currentTheme keys (dari AppContext) ke nama yang dipakai di profile
   const theme = {
@@ -57,8 +74,8 @@ export default function ProfileScreen() {
             <Image source={PROFILE_IMAGE} style={styles.avatar} />
           </View>
 
-          <Text style={[styles.profileName, { color: theme.text }]}>{STUDENT_NAME}</Text>
-          <Text style={[styles.profileNim, { color: theme.subtext }]}>{STUDENT_NIM}</Text>
+          <Text style={[styles.profileName, { color: theme.text }]}>{user?.name ?? "–"}</Text>
+          <Text style={[styles.profileNim, { color: theme.subtext }]}>{user?.nim ?? "–"}</Text>
         </View>
 
         {/* ── Settings ── */}
@@ -114,7 +131,10 @@ export default function ProfileScreen() {
         </View>
 
         <TouchableOpacity
-            onPress={() => router.replace("/login")}
+             onPress={async () => {
+              await AsyncStorage.removeItem("current_user");
+              router.replace("/login");
+            }}
             style={styles.settingRow}
             activeOpacity={0.7}
           >

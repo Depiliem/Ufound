@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -104,6 +105,14 @@ export default function Login() {
       }
  
       const user = data[0];
+
+      await AsyncStorage.setItem("current_user", JSON.stringify({
+        id: user.id,
+        name: user.name,
+        nim: user.nim,
+        email: user.email,
+        role: user.role,
+      }));
  
       // Arahkan sesuai role
       if (user.role === "admin") {
