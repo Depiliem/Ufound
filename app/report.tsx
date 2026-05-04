@@ -37,6 +37,8 @@ export default function Report() {
   const [floor, setFloor] = useState("");
   const [isFloorModalVisible, setFloorModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isImageOptionsModalVisible, setIsImageOptionsModalVisible] =
+    useState(false);
 
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
   const [mapCoordinate, setMapCoordinate] = useState<{
@@ -84,7 +86,8 @@ export default function Report() {
 
   const floors = getDynamicFloors(building);
 
-  const pickImage = async () => {
+  const pickGallery = async () => {
+    setIsImageOptionsModalVisible(false);
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -93,6 +96,41 @@ export default function Report() {
     });
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    setIsImageOptionsModalVisible(false);
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      if (Platform.OS === "web") {
+        window.alert("Izin kamera ditolak.");
+      } else {
+        Alert.alert(
+          "Izin Ditolak",
+          "Akses kamera dibutuhkan untuk mengambil foto.",
+        );
+      }
+      return;
+    }
+
+    let result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  const handleImageUploadPress = () => {
+    if (reportType === "found") {
+      setIsImageOptionsModalVisible(true);
+    } else {
+      pickGallery();
     }
   };
 
@@ -131,9 +169,9 @@ export default function Report() {
   const handleSubmit = async () => {
     if (!itemName || !category || !building || !floor) {
       if (Platform.OS === "web") {
-        window.alert("Validasi: Mohon lengkapi semua field yang diwajibkan.");
+        window.alert("Validasi: Mohon lengkapi semua field.");
       } else {
-        Alert.alert("Validasi", "Mohon lengkapi semua field yang diwajibkan.");
+        Alert.alert("Validasi", "Mohon lengkapi semua field.");
       }
       return;
     }
@@ -178,7 +216,7 @@ export default function Report() {
           image_url: finalImageUrl,
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
-          status: "pending", // MEMAKSA NILAI DEFAULT AGAR ADMIN TIDAK CRASH
+          status: "pending",
         },
       ]);
 
@@ -190,7 +228,6 @@ export default function Report() {
         let idsArray: string[] = [];
         try {
           idsArray = storedIds ? JSON.parse(storedIds) : [];
-          if (!Array.isArray(idsArray)) idsArray = [];
         } catch (e) {
           idsArray = [];
         }
@@ -310,7 +347,10 @@ export default function Report() {
                 styles.toggleBtn,
                 reportType === "lost" && styles.toggleBtnActive,
               ]}
-              onPress={() => setReportType("lost")}
+              onPress={() => {
+                setReportType("lost");
+                setImageUri(null);
+              }}
             >
               <Text
                 style={[
@@ -327,7 +367,10 @@ export default function Report() {
                 styles.toggleBtn,
                 reportType === "found" && styles.toggleBtnActive,
               ]}
-              onPress={() => setReportType("found")}
+              onPress={() => {
+                setReportType("found");
+                setImageUri(null);
+              }}
             >
               <Text
                 style={[
@@ -500,7 +543,7 @@ export default function Report() {
                   },
                 ]}
               >
-                {mapCoordinate ? "Ubah Titik Lokasi..." : "Tandai di Peta..."}
+                {mapCoordinate ? "Ubah Titik Lokasi" : "Tandai di Peta"}
               </Text>
               <View style={{ flex: 1 }} />
               {mapCoordinate ? (
@@ -559,7 +602,7 @@ export default function Report() {
                   borderColor: currentTheme.border,
                 },
               ]}
-              onPress={pickImage}
+              onPress={handleImageUploadPress}
             >
               {imageUri ? (
                 <Image source={{ uri: imageUri }} style={styles.previewImage} />
@@ -576,7 +619,9 @@ export default function Report() {
                       { color: currentTheme.textSecondary },
                     ]}
                   >
-                    Ketuk untuk memilih foto dari galeri
+                    {reportType === "found"
+                      ? "Ketuk untuk mengambil atau memilih foto"
+                      : "Ketuk untuk memilih foto dari galeri"}
                   </Text>
                 </>
               )}
@@ -627,6 +672,95 @@ export default function Report() {
           }}
           onClose={() => setFloorModalVisible(false)}
         />
+
+        <Modal
+          visible={isImageOptionsModalVisible}
+          transparent={true}
+          animationType="slide"
+        >
+          <TouchableOpacity
+            style={styles.modalOverlayActionSheet}
+            activeOpacity={1}
+            onPress={() => setIsImageOptionsModalVisible(false)}
+          >
+            <View
+              style={[
+                styles.actionSheetContent,
+                {
+                  backgroundColor: currentTheme.cardBackground,
+                  borderColor: currentTheme.border,
+                },
+              ]}
+            >
+              <View style={styles.actionSheetHandle} />
+              <Text
+                style={[
+                  styles.actionSheetTitle,
+                  { color: currentTheme.textMain },
+                ]}
+              >
+                Sumber Foto
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionSheetBtn,
+                  { borderBottomColor: currentTheme.border },
+                ]}
+                onPress={takePhoto}
+              >
+                <View
+                  style={[
+                    styles.actionSheetIconBox,
+                    { backgroundColor: "rgba(88, 86, 214, 0.1)" },
+                  ]}
+                >
+                  <Ionicons name="camera" size={22} color={Colors.primary} />
+                </View>
+                <Text
+                  style={[
+                    styles.actionSheetText,
+                    { color: currentTheme.textMain },
+                  ]}
+                >
+                  Buka Kamera Perangkat
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionSheetBtn,
+                  { borderBottomColor: currentTheme.border },
+                ]}
+                onPress={pickGallery}
+              >
+                <View
+                  style={[
+                    styles.actionSheetIconBox,
+                    { backgroundColor: "rgba(88, 86, 214, 0.1)" },
+                  ]}
+                >
+                  <Ionicons name="images" size={22} color={Colors.primary} />
+                </View>
+                <Text
+                  style={[
+                    styles.actionSheetText,
+                    { color: currentTheme.textMain },
+                  ]}
+                >
+                  Pilih dari Galeri
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionSheetCancelBtn}
+                onPress={() => setIsImageOptionsModalVisible(false)}
+              >
+                <Text style={styles.actionSheetCancelText}>Batal</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         <Modal visible={isMapModalVisible} animationType="slide">
           <View
@@ -836,7 +970,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  uploadText: { marginTop: 10, fontSize: 14, textAlign: "center" },
+  uploadText: {
+    marginTop: 10,
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
   previewImage: { width: "100%", height: "100%", resizeMode: "cover" },
   submitBtn: {
     backgroundColor: Colors.primary,
@@ -883,4 +1022,48 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     elevation: 5,
   },
+  modalOverlayActionSheet: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  actionSheetContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 25,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+  },
+  actionSheetHandle: {
+    width: 40,
+    height: 5,
+    backgroundColor: "#D1D1D6",
+    borderRadius: 3,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  actionSheetTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 20 },
+  actionSheetBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+  },
+  actionSheetIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  actionSheetText: { fontSize: 16, fontWeight: "500" },
+  actionSheetCancelBtn: {
+    marginTop: 20,
+    backgroundColor: "#FF3B30",
+    paddingVertical: 15,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  actionSheetCancelText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
 });

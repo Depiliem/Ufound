@@ -327,13 +327,13 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 10, fontWeight: "bold" },
   dateText: { fontSize: 12 },
   deleteBtn: {
-    backgroundColor: "#FF3B30",
+    backgroundColor: "#3b82f6",
     width: 60,
     justifyContent: "center",
     alignItems: "center",
   },
   doneBtn: {
-    backgroundColor: "#34C759",
+    backgroundColor: "#3b82f6",
     width: 60,
     justifyContent: "center",
     alignItems: "center",
