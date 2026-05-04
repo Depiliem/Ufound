@@ -1,35 +1,25 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
 
-type Item = {
-  id: string;
-  created_at: string;
-  type: "lost" | "found";
-  name: string;
-  category: string;
-  building: string;
-  floor: string;
-  image_url: string | null;
-};
-
 export default function History() {
-  const [myItems, setMyItems] = useState<Item[]>([]);
+  const [myItems, setMyItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { currentTheme } = useAppContext();
 
@@ -37,7 +27,6 @@ export default function History() {
     try {
       setLoading(true);
       const storedIds = await AsyncStorage.getItem("my_reports");
-      console.log("ISI STORAGE DI HP:", storedIds); // Untuk Debugging
 
       if (!storedIds) {
         setMyItems([]);
@@ -48,7 +37,6 @@ export default function History() {
       try {
         idsArray = JSON.parse(storedIds);
       } catch (e) {
-        // Jika file JSON corrupt dari test sebelumnya, bersihkan.
         await AsyncStorage.removeItem("my_reports");
         setMyItems([]);
         return;
@@ -81,10 +69,10 @@ export default function History() {
     }, []),
   );
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string, itemName: string) => {
     Alert.alert(
       "Selesaikan Laporan",
-      "Apakah barang sudah kembali? Laporan akan dihapus permanen.",
+      "Apakah barang sudah kembali? Laporan akan ditutup.",
       [
         { text: "Batal", style: "cancel" },
         {
@@ -92,7 +80,11 @@ export default function History() {
           style: "destructive",
           onPress: async () => {
             try {
-              await supabase.from("items").delete().eq("id", id);
+              // Hapus data dari Supabase
+              const { error } = await supabase.from("items").delete().eq("id", id);
+              if (error) throw error;
+              
+              // Hapus dari penyimpanan lokal HP
               const storedIds = await AsyncStorage.getItem("my_reports");
               if (storedIds) {
                 const updatedIds = JSON.parse(storedIds).filter(
@@ -103,9 +95,20 @@ export default function History() {
                   JSON.stringify(updatedIds),
                 );
               }
+
+              // Munculin Notifikasi Lokal "Barang Ketemu"
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "Barang Ditemukan! 🎉",
+                  body: `Laporan untuk ${itemName} telah ditutup. Syukurlah barang sudah kembali.`,
+                  sound: true,
+                },
+                trigger: null,
+              });
+
               fetchMyReports();
             } catch (error) {
-              Alert.alert("Gagal", "Gagal menghapus.");
+              Alert.alert("Gagal", "Gagal menyelesaikan laporan.");
             }
           },
         },
@@ -113,7 +116,7 @@ export default function History() {
     );
   };
 
-  const renderItem = ({ item }: { item: Item }) => (
+  const renderItem = ({ item }: { item: any }) => (
     <View
       style={[
         styles.card,
@@ -159,7 +162,7 @@ export default function History() {
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.resolveBtn}
-        onPress={() => handleDelete(item.id)}
+        onPress={() => handleDelete(item.id, item.name)} 
       >
         <Text style={styles.resolveText}>Tandai Selesai</Text>
       </TouchableOpacity>
@@ -245,4 +248,4 @@ const styles = StyleSheet.create({
   },
   resolveText: { color: "#FFFFFF", fontWeight: "bold" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-});
+}); 

@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode } from "base64-arraybuffer";
-import { File } from "expo-file-system";
+import * as Device from "expo-device";
+import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -24,6 +26,77 @@ import {
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+const DropdownModal = ({
+  visible,
+  data,
+  selectedValue,
+  onSelect,
+  onClose,
+  currentTheme,
+}: any) => (
+  <Modal visible={visible} transparent={true} animationType="fade">
+    <TouchableWithoutFeedback onPress={onClose}>
+      <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: currentTheme.cardBackground },
+            ]}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {data.map((item: string, index: number) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.dropdownItem,
+                    { borderBottomColor: currentTheme.border },
+                    selectedValue === item && {
+                      backgroundColor: currentTheme.chipActive,
+                    },
+                    index === data.length - 1 && styles.dropdownItemLast,
+                  ]}
+                  onPress={() => onSelect(item)}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      { color: currentTheme.textMain },
+                      selectedValue === item && {
+                        color: Colors.primary,
+                        fontWeight: "bold",
+                      },
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                  {selectedValue === item && (
+                    <Ionicons
+                      name="checkmark"
+                      size={18}
+                      color={Colors.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
+);
 
 export default function Report() {
   const [reportType, setReportType] = useState<"lost" | "found">("lost");
@@ -46,6 +119,8 @@ export default function Report() {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [isMinimized, setIsMinimized] = useState(false);
 
+  // State untuk menyimpan Push Token
+  const [expoPushToken, setExpoPushToken] = useState("");
   const { currentTheme } = useAppContext();
 
   const categories = [
@@ -56,6 +131,48 @@ export default function Report() {
     "Lainnya",
   ];
   const buildings = ["Gedung A", "Gedung B", "Gedung C", "Gedung D"];
+
+  const registerForPushNotificationsAsync = async () => {
+    let token;
+
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "default",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#FF231F7C",
+      });
+    }
+
+    if (Device.isDevice) {
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== "granted") {
+        console.log("Izin push notifikasi tidak diberikan!");
+        return;
+      }
+
+      try {
+        const projectId = "YOUR_PROJECT_ID_HERE"; // Ganti dengan Project ID Expo lu nanti saat rilis
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        console.log("EXPO PUSH TOKEN:", token);
+        setExpoPushToken(token);
+      } catch (error) {
+        console.log("Gagal ambil token di Expo Go:", error);
+      }
+    }
+
+    return token;
+  };
+
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+  }, []);
 
   const getDynamicFloors = (selectedBuilding: string) => {
     let maxFloors = 0;
@@ -113,11 +230,12 @@ export default function Report() {
     const formattedBuilding = building.toLowerCase().replace(/\s+/g, "-");
     const formattedFloor = floor.toLowerCase().replace(/\s+/g, "-");
     const fileName = `${formattedBuilding}-${formattedFloor}.jpg`;
+    
+    // Ngambil gambar dari bucket Supabase
     const { data } = supabase.storage.from("floor-maps").getPublicUrl(fileName);
     return data.publicUrl;
   };
 
-  // Generator UUID Client-Side Absolut
   const generateUUID = () => {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
       /[xy]/g,
@@ -136,7 +254,7 @@ export default function Report() {
     }
     setIsLoading(true);
     try {
-      const newItemId = generateUUID(); // Buat ID secara mandiri
+      const newItemId = generateUUID();
       let finalImageUrl = null;
 
       if (imageUri) {
@@ -144,26 +262,32 @@ export default function Report() {
         const fileName = `public/${Date.now()}.${fileExt}`;
         const mimeType = fileExt === "png" ? "image/png" : "image/jpeg";
         let fileData;
+
         if (Platform.OS === "web") {
           const response = await fetch(imageUri);
           fileData = await response.blob();
         } else {
-          const file = new File(imageUri);
-          const base64 = await file.base64();
+          const base64 = await FileSystem.readAsStringAsync(imageUri, {
+            encoding: "base64", // Sudah diperbaiki
+          });
           fileData = decode(base64);
         }
+
+        // Upload gambar ke Supabase
         const { error } = await supabase.storage
           .from("item-images")
           .upload(fileName, fileData, { contentType: mimeType });
         if (error) throw new Error(`Gagal unggah foto: ${error.message}`);
+
         finalImageUrl = supabase.storage
           .from("item-images")
           .getPublicUrl(fileName).data.publicUrl;
       }
 
+      // Insert data ke tabel items di Supabase, termasuk Push Token
       const { error: insertError } = await supabase.from("items").insert([
         {
-          id: newItemId, // Pasang ID buatan sendiri ke Supabase
+          id: newItemId,
           type: reportType,
           name: itemName,
           category: category,
@@ -173,13 +297,13 @@ export default function Report() {
           image_url: finalImageUrl,
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
+          push_token: expoPushToken, // Token disimpan untuk dihubungi Admin nanti
         },
-      ]); // Tidak perlu .select() lagi!
+      ]);
 
       if (insertError)
         throw new Error(`Gagal simpan data: ${insertError.message}`);
 
-      // Eksekusi mutlak penyimpanan lokal jika tipe = lost
       if (reportType === "lost") {
         const storedIds = await AsyncStorage.getItem("my_reports");
         let idsArray: string[] = [];
@@ -191,10 +315,9 @@ export default function Report() {
         }
         idsArray.push(newItemId);
         await AsyncStorage.setItem("my_reports", JSON.stringify(idsArray));
-        console.log("ID TERSIMPAN DI LOKAL:", newItemId); // Untuk cek di Terminal
       }
 
-      Alert.alert("Sukses", "Laporan berhasil disimpan.", [
+      Alert.alert("Sukses", "Laporan berhasil dikirim dan menunggu persetujuan Admin.", [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (error: any) {
@@ -204,66 +327,6 @@ export default function Report() {
       setIsLoading(false);
     }
   };
-
-  const DropdownModal = ({
-    visible,
-    data,
-    selectedValue,
-    onSelect,
-    onClose,
-  }: any) => (
-    <Modal visible={visible} transparent={true} animationType="fade">
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback>
-            <View
-              style={[
-                styles.modalContent,
-                { backgroundColor: currentTheme.cardBackground },
-              ]}
-            >
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {data.map((item: string, index: number) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.dropdownItem,
-                      { borderBottomColor: currentTheme.border },
-                      selectedValue === item && {
-                        backgroundColor: currentTheme.chipActive,
-                      },
-                      index === data.length - 1 && styles.dropdownItemLast,
-                    ]}
-                    onPress={() => onSelect(item)}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        { color: currentTheme.textMain },
-                        selectedValue === item && {
-                          color: Colors.primary,
-                          fontWeight: "bold",
-                        },
-                      ]}
-                    >
-                      {item}
-                    </Text>
-                    {selectedValue === item && (
-                      <Ionicons
-                        name="checkmark"
-                        size={18}
-                        color={Colors.primary}
-                      />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
-  );
 
   const screenWidth = Dimensions.get("window").width;
   const minWidth = screenWidth;
@@ -586,6 +649,7 @@ export default function Report() {
           visible={isCategoryModalVisible}
           data={categories}
           selectedValue={category}
+          currentTheme={currentTheme}
           onSelect={(item: string) => {
             setCategory(item);
             setCategoryModalVisible(false);
@@ -596,6 +660,7 @@ export default function Report() {
           visible={isBuildingModalVisible}
           data={buildings}
           selectedValue={building}
+          currentTheme={currentTheme}
           onSelect={(item: string) => {
             setBuilding(item);
             setBuildingModalVisible(false);
@@ -608,6 +673,7 @@ export default function Report() {
           visible={isFloorModalVisible}
           data={floors}
           selectedValue={floor}
+          currentTheme={currentTheme}
           onSelect={(item: string) => {
             setFloor(item);
             setFloorModalVisible(false);
