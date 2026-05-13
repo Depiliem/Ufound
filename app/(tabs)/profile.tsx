@@ -1,15 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
+import AntDesign from '@expo/vector-icons/AntDesign';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  Image,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { Colors } from "../../constants/Colors";
 import { useAppContext } from "../../context/AppContext";
@@ -21,7 +22,37 @@ type UserData = {
   email: string;
   role: string;
 };
-const PROFILE_IMAGE = { uri: "https://randomuser.me/api/portraits/men/9.jpg" };
+function DefaultAvatar({ size = 90 }: { size?: number }) {
+  return (
+    <View style={{
+      width: size,
+      height: size,
+      borderRadius: size / 2,
+      backgroundColor: "#B0B0B0",
+      justifyContent: "flex-end",
+      alignItems: "center",
+      overflow: "hidden",
+    }}>
+      {/* Kepala */}
+      <View style={{
+        width: size * 0.38,
+        height: size * 0.38,
+        borderRadius: size * 0.19,
+        backgroundColor: "#D4D4D4",
+        position: "absolute",
+        top: size * 0.18,
+      }} />
+      {/* Badan */}
+      <View style={{
+        width: size * 0.7,
+        height: size * 0.5,
+        borderRadius: (size * 0.7) / 2,
+        backgroundColor: "#D4D4D4",
+        marginBottom: -size * 0.1,
+      }} />
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const { isDarkMode, toggleTheme, currentTheme } = useAppContext();
@@ -71,7 +102,7 @@ export default function ProfileScreen() {
         {/* ── Profile Card ── */}
         <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <View style={[styles.avatarWrap, { borderColor: theme.primary }]}>
-            <Image source={PROFILE_IMAGE} style={styles.avatar} />
+            <DefaultAvatar />
           </View>
 
           <Text style={[styles.profileName, { color: theme.text }]}>{user?.name ?? "–"}</Text>
@@ -88,7 +119,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              <Text style={styles.settingEmoji}>{isDarkMode ? "🌙" : "🌞"}</Text>
+              <Text style={styles.settingEmoji}>{isDarkMode ? <AntDesign name="moon" size={24} color="yellow" /> : <AntDesign name="sun" size={24} color="black" />}</Text>
               <View>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>
                   {isDarkMode ? "Dark Mode" : "Light Mode"}
@@ -113,7 +144,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              <Text style={styles.settingEmoji}>{isNotif ? "🔔" : "🔕"}</Text>
+              <Text style={styles.settingEmoji}>{isNotif ? <Ionicons name="notifications" size={22} color={theme.text} /> : <Ionicons name="notifications-off" size={24} color={theme.text} />}</Text>
               <View>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>Notifikasi</Text>
                 <Text style={[styles.settingDesc, { color: theme.subtext }]}>
@@ -128,25 +159,24 @@ export default function ProfileScreen() {
               thumbColor={"#fff"}
             />
           </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
+          {/* Log Out Row */}
+          <TouchableOpacity
              onPress={async () => {
               await AsyncStorage.removeItem("current_user");
               router.replace("/login");
             }}
-            style={styles.settingRow}
+            style={[styles.settingRow, { borderBottomColor: theme.border }]}
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              <Text style={styles.settingEmoji}>🚪</Text>
+              <MaterialIcons name="logout" size={24} color={theme.text} />
               <View>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>Log Out</Text>
                 <Text style={[styles.settingDesc, { color: theme.subtext }]}>Keluar Akun</Text>
               </View>
             </View>
           </TouchableOpacity>
-        <View style={{ height: 80 }} />
+        </View>
       </ScrollView>
     </View>
   );

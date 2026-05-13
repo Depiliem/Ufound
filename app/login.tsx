@@ -185,11 +185,6 @@ export default function Login() {
             </TouchableOpacity>
           </View>
  
-          {/* Forgot password */}
-          <TouchableOpacity style={styles.forgotWrap} activeOpacity={0.7}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </TouchableOpacity>
- 
           {/* Login button */}
           <TouchableOpacity
             style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
@@ -243,7 +238,7 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     position: "relative",
-    marginBottom: 14,
+    marginBottom: 25,
   },
   input: {
     backgroundColor: CARD,
@@ -261,13 +256,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     justifyContent: "center",
-  },
-  forgotWrap: {
-    marginBottom: 28,
-  },
-  forgotText: {
-    color: "#FFFFFF",
-    fontSize: 14,
   },
   loginBtn: {
     backgroundColor: "#FFFFFF",
