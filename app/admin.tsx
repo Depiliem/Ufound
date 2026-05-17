@@ -70,7 +70,13 @@ export default function AdminPanel() {
 
   const { currentTheme, isDarkMode } = useAppContext();
 
-  const filterBuildings = ["Semua", "Gedung A", "Gedung B", "Gedung C", "Gedung D"];
+  const filterBuildings = [
+    "Semua",
+    "Gedung A",
+    "Gedung B",
+    "Gedung C",
+    "Gedung D",
+  ];
 
   // ── Role guard ────────────────────────────────────────────────────────────
   useFocusEffect(
@@ -78,9 +84,15 @@ export default function AdminPanel() {
       const checkRole = async () => {
         try {
           const raw = await AsyncStorage.getItem("current_user");
-          if (!raw) { router.replace("/(tabs)"); return; }
+          if (!raw) {
+            router.replace("/(tabs)");
+            return;
+          }
           const user = JSON.parse(raw);
-          if (user.role !== "admin") { router.replace("/(tabs)"); return; }
+          if (user.role !== "admin") {
+            router.replace("/(tabs)");
+            return;
+          }
         } catch {
           router.replace("/(tabs)");
         }
@@ -186,16 +198,21 @@ export default function AdminPanel() {
   const confirmAction = (id: string, newStatus: string) => {
     const actionText = newStatus === "approved" ? "Setujui" : "Tolak";
     if (Platform.OS === "web") {
-      if (window.confirm(`${actionText} laporan ini?`)) handleUpdateStatus(id, newStatus);
+      if (window.confirm(`${actionText} laporan ini?`))
+        handleUpdateStatus(id, newStatus);
     } else {
-      Alert.alert(`${actionText} Laporan`, `Yakin ingin ${actionText.toLowerCase()} laporan ini?`, [
-        { text: "Batal", style: "cancel" },
-        {
-          text: `Ya, ${actionText}`,
-          style: newStatus === "rejected" ? "destructive" : "default",
-          onPress: () => handleUpdateStatus(id, newStatus),
-        },
-      ]);
+      Alert.alert(
+        `${actionText} Laporan`,
+        `Yakin ingin ${actionText.toLowerCase()} laporan ini?`,
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: `Ya, ${actionText}`,
+            style: newStatus === "rejected" ? "destructive" : "default",
+            onPress: () => handleUpdateStatus(id, newStatus),
+          },
+        ],
+      );
     }
   };
 
@@ -233,7 +250,10 @@ export default function AdminPanel() {
     <TouchableOpacity
       style={[
         styles.card,
-        { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+        {
+          backgroundColor: currentTheme.cardBackground,
+          borderColor: currentTheme.border,
+        },
       ]}
       onPress={() => router.push(`/detail/${item.id}`)}
     >
@@ -241,8 +261,17 @@ export default function AdminPanel() {
         {item.image_url ? (
           <Image source={{ uri: item.image_url }} style={styles.cardImage} />
         ) : (
-          <View style={[styles.noImageContainer, { backgroundColor: currentTheme.background }]}>
-            <Ionicons name="image-outline" size={40} color={currentTheme.textSecondary} />
+          <View
+            style={[
+              styles.noImageContainer,
+              { backgroundColor: currentTheme.background },
+            ]}
+          >
+            <Ionicons
+              name="image-outline"
+              size={40}
+              color={currentTheme.textSecondary}
+            />
           </View>
         )}
         <View style={styles.categoryOverlay}>
@@ -261,18 +290,33 @@ export default function AdminPanel() {
       </View>
 
       <View style={styles.cardContent}>
-        <Text style={[styles.itemName, { color: currentTheme.textMain }]} numberOfLines={1}>
+        <Text
+          style={[styles.itemName, { color: currentTheme.textMain }]}
+          numberOfLines={1}
+        >
           {item.name}
         </Text>
         <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={14} color={currentTheme.textSecondary} />
-          <Text style={[styles.locationText, { color: currentTheme.textSecondary }]}>
+          <Ionicons
+            name="location-outline"
+            size={14}
+            color={currentTheme.textSecondary}
+          />
+          <Text
+            style={[styles.locationText, { color: currentTheme.textSecondary }]}
+          >
             {item.building} · {item.floor}
           </Text>
         </View>
         <View style={styles.dateRow}>
-          <Ionicons name="time-outline" size={13} color={currentTheme.textSecondary} />
-          <Text style={[styles.dateText, { color: currentTheme.textSecondary }]}>
+          <Ionicons
+            name="time-outline"
+            size={13}
+            color={currentTheme.textSecondary}
+          />
+          <Text
+            style={[styles.dateText, { color: currentTheme.textSecondary }]}
+          >
             {formatDate(item.created_at)}
           </Text>
         </View>
@@ -285,7 +329,10 @@ export default function AdminPanel() {
     <View
       style={[
         styles.pendingCard,
-        { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+        {
+          backgroundColor: currentTheme.cardBackground,
+          borderColor: currentTheme.border,
+        },
       ]}
     >
       <TouchableOpacity
@@ -298,24 +345,45 @@ export default function AdminPanel() {
         {item.image_url ? (
           <Image source={{ uri: item.image_url }} style={styles.pendingThumb} />
         ) : (
-          <View style={[styles.pendingThumbEmpty, { backgroundColor: currentTheme.background }]}>
-            <Ionicons name="image-outline" size={24} color={currentTheme.textSecondary} />
+          <View
+            style={[
+              styles.pendingThumbEmpty,
+              { backgroundColor: currentTheme.background },
+            ]}
+          >
+            <Ionicons
+              name="image-outline"
+              size={24}
+              color={currentTheme.textSecondary}
+            />
           </View>
         )}
         <View style={styles.pendingCardText}>
-          <Text style={[styles.pendingItemName, { color: currentTheme.textMain }]} numberOfLines={1}>
+          <Text
+            style={[styles.pendingItemName, { color: currentTheme.textMain }]}
+            numberOfLines={1}
+          >
             {item.name}
           </Text>
-          <Text style={[styles.pendingMeta, { color: currentTheme.textSecondary }]}>
+          <Text
+            style={[styles.pendingMeta, { color: currentTheme.textSecondary }]}
+          >
             {item.category} · {item.building} · {item.floor}
           </Text>
-          <Text style={[styles.pendingDate, { color: currentTheme.textSecondary }]}>
+          <Text
+            style={[styles.pendingDate, { color: currentTheme.textSecondary }]}
+          >
             {formatDate(item.created_at)}
           </Text>
         </View>
       </TouchableOpacity>
 
-      <View style={[styles.pendingActionRow, { borderTopColor: currentTheme.border }]}>
+      <View
+        style={[
+          styles.pendingActionRow,
+          { borderTopColor: currentTheme.border },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.pendingActionBtn, styles.rejectBtn]}
           onPress={() => confirmAction(item.id, "rejected")}
@@ -341,8 +409,9 @@ export default function AdminPanel() {
         barStyle={isDarkMode ? "light-content" : "dark-content"}
         backgroundColor={currentTheme.background}
       />
-      <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-
+      <View
+        style={[styles.container, { backgroundColor: currentTheme.background }]}
+      >
         {/* Header — sama seperti Home tapi ada icon moderasi */}
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
@@ -356,9 +425,16 @@ export default function AdminPanel() {
             </TouchableOpacity>
 
             {/* Moderation icon + badge */}
-            <TouchableOpacity onPress={openModeration} style={styles.iconButton}>
+            <TouchableOpacity
+              onPress={openModeration}
+              style={styles.iconButton}
+            >
               <View>
-                <Ionicons name="shield-checkmark-outline" size={22} color="#FFFFFF" />
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={22}
+                  color="#FFFFFF"
+                />
                 {pendingCount > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>
@@ -416,7 +492,10 @@ export default function AdminPanel() {
           <View
             style={[
               styles.searchBar,
-              { backgroundColor: currentTheme.searchBackground, borderColor: currentTheme.border },
+              {
+                backgroundColor: currentTheme.searchBackground,
+                borderColor: currentTheme.border,
+              },
             ]}
           >
             <TextInput
@@ -426,13 +505,23 @@ export default function AdminPanel() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            <Ionicons name="search" size={20} color={currentTheme.textSecondary} style={styles.searchIcon} />
+            <Ionicons
+              name="search"
+              size={20}
+              color={currentTheme.textSecondary}
+              style={styles.searchIcon}
+            />
           </View>
         </View>
 
         {/* Category Filter */}
         <View style={styles.categorySection}>
-          <Text style={[styles.categorySectionLabel, { color: currentTheme.textSecondary }]}>
+          <Text
+            style={[
+              styles.categorySectionLabel,
+              { color: currentTheme.textSecondary },
+            ]}
+          >
             Category
           </Text>
           <ScrollView
@@ -448,8 +537,12 @@ export default function AdminPanel() {
                   style={[
                     styles.categoryChip,
                     {
-                      backgroundColor: isActive ? Colors.primary : currentTheme.cardBackground,
-                      borderColor: isActive ? Colors.primary : currentTheme.border,
+                      backgroundColor: isActive
+                        ? Colors.primary
+                        : currentTheme.cardBackground,
+                      borderColor: isActive
+                        ? Colors.primary
+                        : currentTheme.border,
                     },
                   ]}
                   onPress={() => setSelectedCategory(cat.value)}
@@ -462,7 +555,11 @@ export default function AdminPanel() {
                   <Text
                     style={[
                       styles.categoryChipText,
-                      { color: isActive ? "#FFFFFF" : currentTheme.textSecondary },
+                      {
+                        color: isActive
+                          ? "#FFFFFF"
+                          : currentTheme.textSecondary,
+                      },
                     ]}
                   >
                     {cat.label}
@@ -485,7 +582,10 @@ export default function AdminPanel() {
                 key={index}
                 style={[
                   styles.filterChip,
-                  { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                  {
+                    backgroundColor: currentTheme.cardBackground,
+                    borderColor: currentTheme.border,
+                  },
                   selectedBuilding === bldg && {
                     backgroundColor: currentTheme.chipActive,
                     borderColor: currentTheme.chipActive,
@@ -497,7 +597,10 @@ export default function AdminPanel() {
                   style={[
                     styles.filterChipText,
                     { color: currentTheme.textSecondary },
-                    selectedBuilding === bldg && { color: currentTheme.textMain, fontWeight: "bold" },
+                    selectedBuilding === bldg && {
+                      color: currentTheme.textMain,
+                      fontWeight: "bold",
+                    },
                   ]}
                 >
                   {bldg}
@@ -510,7 +613,12 @@ export default function AdminPanel() {
         {/* Results count */}
         {!loading && (
           <View style={styles.resultsBar}>
-            <Text style={[styles.resultsCount, { color: currentTheme.textSecondary }]}>
+            <Text
+              style={[
+                styles.resultsCount,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
               {filteredItems.length} item ditemukan
             </Text>
           </View>
@@ -523,8 +631,14 @@ export default function AdminPanel() {
           </View>
         ) : filteredItems.length === 0 ? (
           <View style={styles.centerContent}>
-            <Ionicons name="search-outline" size={60} color={currentTheme.iconEmpty} />
-            <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+            <Ionicons
+              name="search-outline"
+              size={60}
+              color={currentTheme.iconEmpty}
+            />
+            <Text
+              style={[styles.emptyText, { color: currentTheme.textSecondary }]}
+            >
               Tidak ada data yang sesuai.
             </Text>
           </View>
@@ -564,9 +678,22 @@ export default function AdminPanel() {
         animationType="slide"
         onRequestClose={() => setIsModerationVisible(false)}
       >
-        <View style={[styles.modalContainer, { backgroundColor: currentTheme.background }]}>
+        <View
+          style={[
+            styles.modalContainer,
+            { backgroundColor: currentTheme.background },
+          ]}
+        >
           {/* Modal header */}
-          <View style={[styles.modalHeader, { borderBottomColor: currentTheme.border, backgroundColor: Colors.primary }]}>
+          <View
+            style={[
+              styles.modalHeader,
+              {
+                borderBottomColor: currentTheme.border,
+                backgroundColor: Colors.primary,
+              },
+            ]}
+          >
             <TouchableOpacity onPress={() => setIsModerationVisible(false)}>
               <Ionicons name="close" size={26} color="#FFFFFF" />
             </TouchableOpacity>
@@ -575,7 +702,12 @@ export default function AdminPanel() {
           </View>
 
           {/* Pending tab Lost/Found */}
-          <View style={[styles.tabContainer, { borderBottomColor: currentTheme.border }]}>
+          <View
+            style={[
+              styles.tabContainer,
+              { borderBottomColor: currentTheme.border },
+            ]}
+          >
             <TouchableOpacity
               style={[
                 styles.tabButton,
@@ -632,21 +764,53 @@ export default function AdminPanel() {
       </Modal>
 
       {/* ── Manual Tab Bar ───────────────────────────────────────────────── */}
-      <View style={[styles.tabBar, { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border }]}>
+      <View
+        style={[
+          styles.tabBar,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderTopColor: currentTheme.border,
+          },
+        ]}
+      >
         <View style={styles.tabBarItem}>
           <Ionicons name="home" size={24} color={Colors.primary} />
-          <Text style={[styles.tabBarLabel, { color: Colors.primary }]}>Home</Text>
+          <Text style={[styles.tabBarLabel, { color: Colors.primary }]}>
+            Home
+          </Text>
         </View>
 
-        <TouchableOpacity style={styles.tabBarFabWrap} onPress={() => router.push("/report")}>
-          <View style={[styles.tabBarFabInner, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+        <TouchableOpacity
+          style={styles.tabBarFabWrap}
+          onPress={() => router.push("/report")}
+        >
+          <View
+            style={[
+              styles.tabBarFabInner,
+              {
+                backgroundColor: currentTheme.cardBackground,
+                borderColor: currentTheme.border,
+              },
+            ]}
+          >
             <Ionicons name="add" size={32} color={Colors.primary} />
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push("/(tabs)/profile")}>
-          <Ionicons name="person-outline" size={24} color={currentTheme.textSecondary} />
-          <Text style={[styles.tabBarLabel, { color: currentTheme.textSecondary }]}>Profile</Text>
+        <TouchableOpacity
+          style={styles.tabBarItem}
+          onPress={() => router.push("/(tabs)/profile")}
+        >
+          <Ionicons
+            name="person-outline"
+            size={24}
+            color={currentTheme.textSecondary}
+          />
+          <Text
+            style={[styles.tabBarLabel, { color: currentTheme.textSecondary }]}
+          >
+            Profile
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -684,8 +848,14 @@ function PendingList({
   if (pendingItems.length === 0) {
     return (
       <View style={styles.centerContent}>
-        <Ionicons name="shield-checkmark-outline" size={60} color={currentTheme.iconEmpty} />
-        <Text style={[styles.emptyTitle, { color: currentTheme.textMain }]}>Semua Bersih!</Text>
+        <Ionicons
+          name="shield-checkmark-outline"
+          size={60}
+          color={currentTheme.iconEmpty}
+        />
+        <Text style={[styles.emptyTitle, { color: currentTheme.textMain }]}>
+          Semua Bersih!
+        </Text>
         <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
           Tidak ada laporan yang menunggu moderasi.
         </Text>
@@ -717,7 +887,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: Colors.primary,
   },
-  topHeaderTitle: { fontSize: 18, fontWeight: "bold", color: "#FFFFFF", letterSpacing: 1 },
+  topHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+  },
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
 
@@ -738,7 +913,12 @@ const styles = StyleSheet.create({
 
   // Tabs
   tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
-  tabButton: { flex: 1, paddingVertical: 10, alignItems: "center", borderBottomWidth: 2 },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderBottomWidth: 2,
+  },
   tabText: { fontSize: 14, fontWeight: "600" },
 
   // Search
@@ -755,7 +935,11 @@ const styles = StyleSheet.create({
   searchIcon: { marginLeft: 10 },
 
   // Category
-  categorySection: { paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
+  categorySection: {
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.05)",
+  },
   categorySectionLabel: {
     fontSize: 11,
     fontWeight: "600",
@@ -780,7 +964,13 @@ const styles = StyleSheet.create({
   // Building filter
   filterSection: { marginTop: 10, marginBottom: 4 },
   filterScroll: { paddingHorizontal: 20 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 8, borderWidth: 1, marginRight: 8 },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+  },
   filterChipText: { fontSize: 12, fontWeight: "500" },
 
   // Results
@@ -795,7 +985,12 @@ const styles = StyleSheet.create({
   card: { flex: 1, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
   imageWrapper: { position: "relative" },
   cardImage: { width: "100%", height: 120, resizeMode: "cover" },
-  noImageContainer: { width: "100%", height: 120, justifyContent: "center", alignItems: "center" },
+  noImageContainer: {
+    width: "100%",
+    height: 120,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   categoryOverlay: {
     position: "absolute",
     bottom: 6,
@@ -814,20 +1009,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  typeBadgeLost: { backgroundColor: "rgba(226,75,74,0.85)" },
-  typeBadgeFound: { backgroundColor: "rgba(59,109,17,0.85)" },
+  typeBadgeLost: { backgroundColor: "#EF4444" },
+  typeBadgeFound: { backgroundColor: "#10B981" },
   typeBadgeOverlayText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
   cardContent: { padding: 10 },
   itemName: { fontSize: 13, fontWeight: "600", marginBottom: 5 },
-  locationRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 3 },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 3,
+  },
   locationText: { fontSize: 11, flex: 1 },
   dateRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   dateText: { fontSize: 11 },
-  cardPlaceholder: { flex: 1, borderRadius: 12, overflow: "hidden", backgroundColor: "transparent" },
+  cardPlaceholder: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "transparent",
+  },
 
   // Empty / center
-  centerContent: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 30 },
-  emptyTitle: { fontSize: 17, fontWeight: "bold", marginTop: 14, marginBottom: 6 },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 30,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "bold",
+    marginTop: 14,
+    marginBottom: 6,
+  },
   emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
 
   // Moderation modal
@@ -876,8 +1091,8 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     gap: 6,
   },
-  rejectBtn: { backgroundColor: "#FF3B30" },
-  approveBtn: { backgroundColor: "#34C759" },
+  rejectBtn: { backgroundColor: "#EF4444" },
+  approveBtn: { backgroundColor: "#10B981" },
   pendingActionText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 14 },
 
   // Manual tab bar
