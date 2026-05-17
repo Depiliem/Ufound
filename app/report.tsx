@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode } from "base64-arraybuffer";
 import * as Device from "expo-device";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
@@ -297,7 +297,8 @@ export default function Report() {
           image_url: finalImageUrl,
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
-          push_token: expoPushToken, // Token disimpan untuk dihubungi Admin nanti
+          push_token: expoPushToken,
+          status: "pending", // Token disimpan untuk dihubungi Admin nanti
         },
       ]);
 

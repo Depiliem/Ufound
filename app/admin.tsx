@@ -82,7 +82,7 @@ export default function AdminPanel() {
     fetchItems();
   };
 
-  // [FITUR BARU] Fungsi ngirim notifikasi beserta URL Tujuan (Deep Link)
+  // Fungsi ngirim notifikasi beserta URL Tujuan (Deep Link)
   const sendPushNotification = async (expoPushToken: string, statusLaporan: string, itemName: string, itemId: string) => {
     const title = statusLaporan === "approved" ? "Laporan Disetujui! 🎉" : "Laporan Ditolak ❌";
     const body = statusLaporan === "approved" 
@@ -91,11 +91,10 @@ export default function AdminPanel() {
 
     const message = {
       to: expoPushToken,
-      sound: "default",
+      sound: "default", // Server bilang ke HP: "Woy, bunyi dan geter ya!"
       title: title,
       body: body,
-      // Ini bagian penting buat nyelipin URL tujuannya
-      data: { url: `/detail/${itemId}` }, 
+      data: { url: `/detail/${itemId}` }, // Selipin data buat loncat halaman
     };
 
     try {
@@ -123,7 +122,7 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      // Panggil fungsi notifikasi dan kirim item.id
+      // Eksekusi tembak notif ke token pelapor
       if (item.push_token) {
         await sendPushNotification(item.push_token, newStatus, item.name, item.id);
       }

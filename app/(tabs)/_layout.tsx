@@ -1,9 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, router } from "expo-router";
-import React, { useEffect } from "react"; // [DITAMBAHKAN] Import useEffect
+import React, { useEffect } from "react"; 
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Colors } from "../../constants/Colors";
-import * as Notifications from "expo-notifications"; // [DITAMBAHKAN] Import Notifikasi
+import * as Notifications from "expo-notifications";
+
+// [FITUR BARU] Mesin utama biar HP lu GETER dan BUNYI pas notif masuk
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true, // Kunci utama buat bunyi & geter
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 function CustomTabBarButton({ children, onPress }: any) {
   return (
@@ -14,7 +25,7 @@ function CustomTabBarButton({ children, onPress }: any) {
 }
 
 export default function TabLayout() {
-  // [FITUR BARU DITAMBAHKAN] Listener buat nangkap klik notifikasi
+  // Listener buat nangkap klik notifikasi
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const urlTujuan = response.notification.request.content.data?.url;
