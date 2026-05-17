@@ -122,8 +122,7 @@ export default function Report() {
   };
 
   const handleImageUploadPress = () => {
-    if (reportType === "found") setIsImageOptionsModalVisible(true);
-    else pickGallery();
+    setIsImageOptionsModalVisible(true);
   };
 
   const handleMapPress = (event: any) => {
