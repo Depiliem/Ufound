@@ -51,6 +51,18 @@ const CATEGORIES: CategoryOption[] = [
   { label: "Lainnya", value: "Lainnya", icon: "cube-outline" },
 ];
 
+// ── Fungsi Helper Parsing Thumbnail ──────────────────────────────────────────
+const getThumbnail = (urlData: string | null) => {
+  if (!urlData) return null;
+  try {
+    const parsed = JSON.parse(urlData);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+    return urlData;
+  } catch {
+    return urlData;
+  }
+};
+
 export default function AdminPanel() {
   // ── Main view state (approved items, sama seperti Home) ──────────────────
   const [items, setItems] = useState<Item[]>([]);
@@ -169,10 +181,7 @@ export default function AdminPanel() {
     fetchPendingItems();
   };
 
-  // Re-fetch when pendingTab changes inside modal
-  useFocusEffect(
-    useCallback(() => {}, []), // placeholder, handled via useCallback dep below
-  );
+  useFocusEffect(useCallback(() => {}, []));
 
   // ── Moderation actions ────────────────────────────────────────────────────
   const handleUpdateStatus = async (id: string, newStatus: string) => {
@@ -182,7 +191,6 @@ export default function AdminPanel() {
         .update({ status: newStatus })
         .eq("id", id);
       if (error) throw error;
-      // refresh both
       fetchPendingItems();
       fetchPendingCount();
       fetchApprovedItems();
@@ -246,161 +254,184 @@ export default function AdminPanel() {
   });
 
   // ── Render: main grid card (sama seperti Home) ────────────────────────────
-  const renderMainCard = ({ item }: { item: Item }) => (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        {
-          backgroundColor: currentTheme.cardBackground,
-          borderColor: currentTheme.border,
-        },
-      ]}
-      onPress={() => router.push(`/detail/${item.id}`)}
-    >
-      <View style={styles.imageWrapper}>
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-        ) : (
-          <View
-            style={[
-              styles.noImageContainer,
-              { backgroundColor: currentTheme.background },
-            ]}
-          >
-            <Ionicons
-              name="image-outline"
-              size={40}
-              color={currentTheme.textSecondary}
-            />
-          </View>
-        )}
-        <View style={styles.categoryOverlay}>
-          <Text style={styles.categoryOverlayText}>{item.category}</Text>
-        </View>
-        <View
-          style={[
-            styles.typeBadgeOverlay,
-            item.type === "lost" ? styles.typeBadgeLost : styles.typeBadgeFound,
-          ]}
-        >
-          <Text style={styles.typeBadgeOverlayText}>
-            {item.type === "lost" ? "Hilang" : "Ditemukan"}
-          </Text>
-        </View>
-      </View>
+  const renderMainCard = ({ item }: { item: Item }) => {
+    const thumbnailUri = getThumbnail(item.image_url);
 
-      <View style={styles.cardContent}>
-        <Text
-          style={[styles.itemName, { color: currentTheme.textMain }]}
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-        <View style={styles.locationRow}>
-          <Ionicons
-            name="location-outline"
-            size={14}
-            color={currentTheme.textSecondary}
-          />
-          <Text
-            style={[styles.locationText, { color: currentTheme.textSecondary }]}
-          >
-            {item.building} · {item.floor}
-          </Text>
-        </View>
-        <View style={styles.dateRow}>
-          <Ionicons
-            name="time-outline"
-            size={13}
-            color={currentTheme.textSecondary}
-          />
-          <Text
-            style={[styles.dateText, { color: currentTheme.textSecondary }]}
-          >
-            {formatDate(item.created_at)}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  // ── Render: pending card inside moderation modal ──────────────────────────
-  const renderPendingCard = ({ item }: { item: Item }) => (
-    <View
-      style={[
-        styles.pendingCard,
-        {
-          backgroundColor: currentTheme.cardBackground,
-          borderColor: currentTheme.border,
-        },
-      ]}
-    >
+    return (
       <TouchableOpacity
-        style={styles.pendingCardTop}
-        onPress={() => {
-          setIsModerationVisible(false);
-          router.push(`/detail/${item.id}`);
-        }}
+        style={[
+          styles.card,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}
+        onPress={() => router.push(`/detail/${item.id}`)}
       >
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.pendingThumb} />
-        ) : (
+        <View style={styles.imageWrapper}>
+          {thumbnailUri ? (
+            <Image source={{ uri: thumbnailUri }} style={styles.cardImage} />
+          ) : (
+            <View
+              style={[
+                styles.noImageContainer,
+                { backgroundColor: currentTheme.background },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={40}
+                color={currentTheme.textSecondary}
+              />
+            </View>
+          )}
+          <View style={styles.categoryOverlay}>
+            <Text style={styles.categoryOverlayText}>{item.category}</Text>
+          </View>
           <View
             style={[
-              styles.pendingThumbEmpty,
-              { backgroundColor: currentTheme.background },
+              styles.typeBadgeOverlay,
+              item.type === "lost"
+                ? styles.typeBadgeLost
+                : styles.typeBadgeFound,
             ]}
           >
-            <Ionicons
-              name="image-outline"
-              size={24}
-              color={currentTheme.textSecondary}
-            />
+            <Text style={styles.typeBadgeOverlayText}>
+              {item.type === "lost" ? "Hilang" : "Ditemukan"}
+            </Text>
           </View>
-        )}
-        <View style={styles.pendingCardText}>
+        </View>
+
+        <View style={styles.cardContent}>
           <Text
-            style={[styles.pendingItemName, { color: currentTheme.textMain }]}
+            style={[styles.itemName, { color: currentTheme.textMain }]}
             numberOfLines={1}
           >
             {item.name}
           </Text>
-          <Text
-            style={[styles.pendingMeta, { color: currentTheme.textSecondary }]}
-          >
-            {item.category} · {item.building} · {item.floor}
-          </Text>
-          <Text
-            style={[styles.pendingDate, { color: currentTheme.textSecondary }]}
-          >
-            {formatDate(item.created_at)}
-          </Text>
+          <View style={styles.locationRow}>
+            <Ionicons
+              name="location-outline"
+              size={14}
+              color={currentTheme.textSecondary}
+            />
+            <Text
+              style={[
+                styles.locationText,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {item.building} · {item.floor}
+            </Text>
+          </View>
+          <View style={styles.dateRow}>
+            <Ionicons
+              name="time-outline"
+              size={13}
+              color={currentTheme.textSecondary}
+            />
+            <Text
+              style={[styles.dateText, { color: currentTheme.textSecondary }]}
+            >
+              {formatDate(item.created_at)}
+            </Text>
+          </View>
         </View>
       </TouchableOpacity>
+    );
+  };
 
+  // ── Render: pending card inside moderation modal ──────────────────────────
+  const renderPendingCard = ({ item }: { item: Item }) => {
+    const thumbnailUri = getThumbnail(item.image_url);
+
+    return (
       <View
         style={[
-          styles.pendingActionRow,
-          { borderTopColor: currentTheme.border },
+          styles.pendingCard,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
         ]}
       >
         <TouchableOpacity
-          style={[styles.pendingActionBtn, styles.rejectBtn]}
-          onPress={() => confirmAction(item.id, "rejected")}
+          style={styles.pendingCardTop}
+          onPress={() => {
+            setIsModerationVisible(false);
+            router.push(`/detail/${item.id}`);
+          }}
         >
-          <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
-          <Text style={styles.pendingActionText}>Tolak</Text>
+          {thumbnailUri ? (
+            <Image source={{ uri: thumbnailUri }} style={styles.pendingThumb} />
+          ) : (
+            <View
+              style={[
+                styles.pendingThumbEmpty,
+                { backgroundColor: currentTheme.background },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={24}
+                color={currentTheme.textSecondary}
+              />
+            </View>
+          )}
+          <View style={styles.pendingCardText}>
+            <Text
+              style={[styles.pendingItemName, { color: currentTheme.textMain }]}
+              numberOfLines={1}
+            >
+              {item.name}
+            </Text>
+            <Text
+              style={[
+                styles.pendingMeta,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {item.category} · {item.building} · {item.floor}
+            </Text>
+            <Text
+              style={[
+                styles.pendingDate,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {formatDate(item.created_at)}
+            </Text>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.pendingActionBtn, styles.approveBtn]}
-          onPress={() => confirmAction(item.id, "approved")}
+
+        <View
+          style={[
+            styles.pendingActionRow,
+            { borderTopColor: currentTheme.border },
+          ]}
         >
-          <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
-          <Text style={styles.pendingActionText}>Setujui</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.pendingActionBtn, styles.rejectBtn]}
+            onPress={() => confirmAction(item.id, "rejected")}
+          >
+            <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.pendingActionText}>Tolak</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.pendingActionBtn, styles.approveBtn]}
+            onPress={() => confirmAction(item.id, "approved")}
+          >
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.pendingActionText}>Setujui</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   // ── Main render ───────────────────────────────────────────────────────────
   return (
@@ -412,11 +443,9 @@ export default function AdminPanel() {
       <View
         style={[styles.container, { backgroundColor: currentTheme.background }]}
       >
-        {/* Header — sama seperti Home tapi ada icon moderasi */}
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
           <View style={styles.headerIcons}>
-            {/* History */}
             <TouchableOpacity
               onPress={() => router.push("/history")}
               style={styles.iconButton}
@@ -424,7 +453,6 @@ export default function AdminPanel() {
               <Ionicons name="time" size={22} color="#FFFFFF" />
             </TouchableOpacity>
 
-            {/* Moderation icon + badge */}
             <TouchableOpacity
               onPress={openModeration}
               style={styles.iconButton}
@@ -447,7 +475,6 @@ export default function AdminPanel() {
           </View>
         </View>
 
-        {/* Lost / Found Tabs */}
         <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[
@@ -487,7 +514,6 @@ export default function AdminPanel() {
           </TouchableOpacity>
         </View>
 
-        {/* Search Bar */}
         <View style={styles.searchSection}>
           <View
             style={[
@@ -514,7 +540,6 @@ export default function AdminPanel() {
           </View>
         </View>
 
-        {/* Category Filter */}
         <View style={styles.categorySection}>
           <Text
             style={[
@@ -570,7 +595,6 @@ export default function AdminPanel() {
           </ScrollView>
         </View>
 
-        {/* Building Filter */}
         <View style={styles.filterSection}>
           <ScrollView
             horizontal
@@ -610,7 +634,6 @@ export default function AdminPanel() {
           </ScrollView>
         </View>
 
-        {/* Results count */}
         {!loading && (
           <View style={styles.resultsBar}>
             <Text
@@ -624,7 +647,6 @@ export default function AdminPanel() {
           </View>
         )}
 
-        {/* Main grid list */}
         {loading ? (
           <View style={styles.centerContent}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -672,7 +694,6 @@ export default function AdminPanel() {
         )}
       </View>
 
-      {/* ── Moderation Modal ─────────────────────────────────────────────── */}
       <Modal
         visible={isModerationVisible}
         animationType="slide"
@@ -684,7 +705,6 @@ export default function AdminPanel() {
             { backgroundColor: currentTheme.background },
           ]}
         >
-          {/* Modal header */}
           <View
             style={[
               styles.modalHeader,
@@ -701,7 +721,6 @@ export default function AdminPanel() {
             <View style={{ width: 26 }} />
           </View>
 
-          {/* Pending tab Lost/Found */}
           <View
             style={[
               styles.tabContainer,
@@ -716,7 +735,6 @@ export default function AdminPanel() {
               ]}
               onPress={() => {
                 setPendingTab("lost");
-                // trigger fetch via useEffect below
               }}
             >
               <Text
@@ -751,7 +769,6 @@ export default function AdminPanel() {
             </TouchableOpacity>
           </View>
 
-          {/* Pending list */}
           <PendingList
             pendingTab={pendingTab}
             currentTheme={currentTheme}
@@ -763,7 +780,6 @@ export default function AdminPanel() {
         </View>
       </Modal>
 
-      {/* ── Manual Tab Bar ───────────────────────────────────────────────── */}
       <View
         style={[
           styles.tabBar,
