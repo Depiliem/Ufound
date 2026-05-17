@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, router } from "expo-router";
+import React, { useEffect } from "react"; // [DITAMBAHKAN] Import useEffect
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Colors } from "../../constants/Colors";
+import * as Notifications from "expo-notifications"; // [DITAMBAHKAN] Import Notifikasi
 
 function CustomTabBarButton({ children, onPress }: any) {
   return (
@@ -12,6 +14,21 @@ function CustomTabBarButton({ children, onPress }: any) {
 }
 
 export default function TabLayout() {
+  // [FITUR BARU DITAMBAHKAN] Listener buat nangkap klik notifikasi
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const urlTujuan = response.notification.request.content.data?.url;
+      
+      if (urlTujuan) {
+        // Otomatis loncat ke halaman detail barang pas notif dipencet
+        router.push(urlTujuan as any);
+      }
+    });
+
+    // Bersihin memori pas komponen ditutup
+    return () => subscription.remove();
+  }, []);
+
   return (
     <Tabs
       screenOptions={{

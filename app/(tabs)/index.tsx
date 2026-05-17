@@ -28,6 +28,7 @@ type Item = {
   floor: string;
   description: string;
   image_url: string | null;
+  status: string;
 };
 
 export default function Home() {
@@ -54,6 +55,7 @@ export default function Home() {
         .from("items")
         .select("*")
         .eq("type", activeTab)
+        .eq("status", "approved")
         .order("created_at", { ascending: false });
 
       if (error) return;
@@ -188,16 +190,24 @@ export default function Home() {
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
           <View style={styles.headerIcons}>
             <TouchableOpacity
-              onPress={() => router.push("./history")}
+              onPress={() => router.push("/history")}
               style={styles.iconButton}
             >
               <Ionicons name="time" size={22} color="#FFFFFF" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="stats-chart" size={22} color="#FFFFFF" />
+
+            <TouchableOpacity
+              onPress={() => router.push("/admin")}
+              style={styles.adminRouteBtn}
+            >
+              <Text style={styles.adminRouteText}>ADMIN</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
-              <Ionicons name="notifications" size={22} color="#FFFFFF" />
+
+            <TouchableOpacity
+              onPress={() => router.replace("/")}
+              style={styles.iconButton}
+            >
+              <Ionicons name="log-out-outline" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -362,6 +372,14 @@ const styles = StyleSheet.create({
   },
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
+  adminRouteBtn: {
+    marginLeft: 15,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  adminRouteText: { color: Colors.primary, fontWeight: "bold", fontSize: 12 },
   tabContainer: {
     flexDirection: "row",
     paddingHorizontal: 20,

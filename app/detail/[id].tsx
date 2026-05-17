@@ -9,7 +9,7 @@ import {
   Modal,
   Platform,
   ScrollView,
-  Share,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -29,76 +29,62 @@ type Item = {
   floor: string;
   description: string;
   image_url: string | null;
-  map_x: number | null;
-  map_y: number | null;
+  status: string;
 };
 
-export default function DetailItem() {
+export default function ItemDetail() {
   const { id } = useLocalSearchParams();
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isMapVisible, setIsMapVisible] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const { currentTheme } = useAppContext();
 
+  const screenWidth = Dimensions.get("window").width;
+
   useEffect(() => {
-    if (!id || id === "undefined") {
-      return;
+    const fetchItemDetail = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("items")
+          .select("*")
+          .eq("id", id)
+          .single();
+
+        if (error) throw error;
+        setItem(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchItemDetail();
     }
-    fetchItemDetail();
   }, [id]);
 
-  const fetchItemDetail = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("items")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) throw error;
-      setItem(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
-  const handleShare = async () => {
-    if (!item) return;
-    try {
-      const message = `🚨 ${item.type === "lost" ? "BARANG HILANG" : "BARANG DITEMUKAN"} 🚨\n\nNama: ${item.name}\nLokasi: ${item.building} - ${item.floor}\n\nCek detailnya di aplikasi Ufound!`;
-      await Share.share({ message });
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const getMapImageUrl = () => {
-    if (!item) return undefined;
-    const formattedBuilding = item.building.toLowerCase().replace(/\s+/g, "-");
-    const formattedFloor = item.floor.toLowerCase().replace(/\s+/g, "-");
-    const fileName = `${formattedBuilding}-${formattedFloor}.jpg`;
-    const { data } = supabase.storage.from("floor-maps").getPublicUrl(fileName);
-    return data.publicUrl;
-  };
-
-  const handleShowMap = () => {
-    if (item && item.map_x !== null && item.map_y !== null) {
-      if (item.map_x > 1 || item.map_y > 1) {
-        Alert.alert(
-          "Data Kedaluwarsa",
-          "Ini adalah laporan versi lama. Posisi peta tidak dapat ditampilkan dengan akurat.",
-        );
-      } else {
-        setIsMapVisible(true);
-      }
+  const handleContactAction = () => {
+    if (Platform.OS === "web") {
+      window.alert(
+        "Fitur kontak akan diaktifkan setelah sistem autentikasi selesai.",
+      );
     } else {
       Alert.alert(
-        "Lokasi",
-        "Tidak ada data lokasi yang ditandai untuk barang ini.",
+        "Informasi",
+        "Fitur kontak akan diaktifkan setelah sistem autentikasi selesai.",
       );
     }
   };
@@ -106,7 +92,10 @@ export default function DetailItem() {
   if (loading) {
     return (
       <View
-        style={[styles.center, { backgroundColor: currentTheme.background }]}
+        style={[
+          styles.centerContainer,
+          { backgroundColor: currentTheme.background },
+        ]}
       >
         <ActivityIndicator size="large" color={Colors.primary} />
       </View>
@@ -116,253 +105,215 @@ export default function DetailItem() {
   if (!item) {
     return (
       <View
-        style={[styles.center, { backgroundColor: currentTheme.background }]}
+        style={[
+          styles.centerContainer,
+          { backgroundColor: currentTheme.background },
+        ]}
       >
-        <Text style={{ color: currentTheme.textMain }}>
-          Data tidak ditemukan.
+        <Ionicons
+          name="alert-circle-outline"
+          size={60}
+          color={currentTheme.textSecondary}
+        />
+        <Text style={[styles.errorText, { color: currentTheme.textMain }]}>
+          Barang tidak ditemukan.
         </Text>
+        <TouchableOpacity
+          style={styles.backBtnError}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backBtnErrorText}>Kembali</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  const mapUrl = getMapImageUrl();
-  const screenWidth = Dimensions.get("window").width;
-  const minWidth = screenWidth;
-  const minHeight = screenWidth * (900 / 1250);
-
   return (
     <View
-      style={[
-        styles.mainContainer,
-        { backgroundColor: currentTheme.background },
-      ]}
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
     >
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color={currentTheme.textMain}
-            />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: currentTheme.textMain }]}>
-            Detail Informasi
-          </Text>
-          <TouchableOpacity onPress={handleShare}>
-            <Ionicons
-              name="share-social-outline"
-              size={24}
-              color={currentTheme.textMain}
-            />
-          </TouchableOpacity>
-        </View>
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="transparent"
+        translucent={true}
+      />
 
-        {item.image_url ? (
-          <Image
-            source={{ uri: item.image_url as string }}
-            style={styles.mainImage}
-          />
-        ) : (
-          <View
-            style={[
-              styles.noImage,
-              { backgroundColor: currentTheme.cardBackground },
-            ]}
-          >
-            <Ionicons
-              name="image-outline"
-              size={80}
-              color={currentTheme.textSecondary}
-            />
-          </View>
-        )}
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+        <View style={styles.imageContainer}>
+          {item.image_url ? (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setIsFullScreen(true)}
+            >
+              <Image
+                source={{ uri: item.image_url }}
+                style={[styles.mainImage, { width: screenWidth }]}
+              />
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.noImagePlaceholder, { width: screenWidth }]}>
+              <Ionicons name="image-outline" size={60} color="#999999" />
+              <Text style={styles.noImageText}>
+                Tidak ada foto yang dilampirkan
+              </Text>
+            </View>
+          )}
 
-        <View style={styles.content}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.name, { color: currentTheme.textMain }]}>
-              {item.name}
-            </Text>
+          <View style={styles.headerFloatingNav}>
+            <TouchableOpacity
+              style={styles.floatingBackBtn}
+              onPress={() => router.back()}
+            >
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
             <View
               style={[
-                styles.badge,
+                styles.floatingBadge,
                 item.type === "lost" ? styles.badgeLost : styles.badgeFound,
               ]}
             >
-              <Text style={styles.badgeText}>
-                {item.type === "lost" ? "Hilang" : "Ditemukan"}
+              <Text style={styles.floatingBadgeText}>
+                {item.type === "lost" ? "HILANG" : "DITEMUKAN"}
               </Text>
             </View>
-          </View>
-
-          <Text style={styles.category}>{item.category}</Text>
-
-          <View
-            style={[
-              styles.infoCard,
-              {
-                backgroundColor: currentTheme.cardBackground,
-                borderColor: currentTheme.border,
-              },
-            ]}
-          >
-            <View style={styles.infoRow}>
-              <Ionicons
-                name="location-outline"
-                size={20}
-                color={Colors.primary}
-              />
-              <Text style={[styles.infoText, { color: currentTheme.textMain }]}>
-                {item.building} - {item.floor}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="time-outline" size={20} color={Colors.primary} />
-              <Text style={[styles.infoText, { color: currentTheme.textMain }]}>
-                {new Date(item.created_at).toLocaleDateString("id-ID", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </Text>
-            </View>
-          </View>
-
-          <Text style={[styles.sectionTitle, { color: currentTheme.textMain }]}>
-            Deskripsi
-          </Text>
-          <Text
-            style={[styles.description, { color: currentTheme.textSecondary }]}
-          >
-            {item.description || "Tidak ada deskripsi tambahan."}
-          </Text>
-
-          <View style={styles.actionContainer}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.mapButton]}
-              onPress={handleShowMap}
-            >
-              <Ionicons name="map-outline" size={22} color="#FFFFFF" />
-              <Text style={[styles.actionButtonText, { color: "#FFFFFF" }]}>
-                Lihat Lokasi di Peta
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
 
-      <Modal visible={isMapVisible} animationType="slide" transparent={false}>
         <View
           style={[
-            styles.modalContainer,
+            styles.contentContainer,
             { backgroundColor: currentTheme.background },
           ]}
         >
-          <View
-            style={[
-              styles.modalHeader,
-              { borderBottomColor: currentTheme.border },
-            ]}
-          >
-            <TouchableOpacity onPress={() => setIsMapVisible(false)}>
-              <Ionicons name="close" size={28} color={currentTheme.textMain} />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: currentTheme.textMain }]}>
-              Titik Lokasi
+          <View style={styles.titleSection}>
+            <Text style={[styles.itemTitle, { color: currentTheme.textMain }]}>
+              {item.name}
             </Text>
-            <View style={{ width: 28 }} />
+            <Text style={[styles.itemCategory, { color: Colors.primary }]}>
+              {item.category}
+            </Text>
           </View>
 
-          <View style={styles.mapViewContainer}>
-            {mapUrl && (
-              <>
-                <ScrollView
-                  horizontal={true}
-                  showsHorizontalScrollIndicator={false}
-                  bounces={false}
-                  contentContainerStyle={{
-                    flexGrow: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
+          <View style={styles.infoCard}>
+            <View
+              style={[
+                styles.infoRow,
+                { borderBottomColor: currentTheme.border },
+              ]}
+            >
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: "rgba(88, 86, 214, 0.1)" },
+                ]}
+              >
+                <Ionicons name="location" size={22} color={Colors.primary} />
+              </View>
+              <View style={styles.infoTextContainer}>
+                <Text
+                  style={[
+                    styles.infoLabel,
+                    { color: currentTheme.textSecondary },
+                  ]}
                 >
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    bounces={false}
-                    contentContainerStyle={{
-                      flexGrow: 1,
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.mapCanvas,
-                        {
-                          width: isMinimized ? minWidth : 1250,
-                          height: isMinimized ? minHeight : 900,
-                        },
-                      ]}
-                    >
-                      <Image
-                        source={{ uri: mapUrl as string }}
-                        style={styles.mapImage}
-                      />
-                      <View
-                        pointerEvents="none"
-                        style={[
-                          styles.pin,
-                          {
-                            left: `${(item.map_x || 0) * 100}%`,
-                            top: `${(item.map_y || 0) * 100}%`,
-                            transform: [
-                              { translateX: -24 },
-                              { translateY: -48 },
-                            ],
-                          },
-                        ]}
-                      >
-                        <Ionicons name="location" size={48} color="#FF3B30" />
-                      </View>
-                    </View>
-                  </ScrollView>
-                </ScrollView>
+                  Lokasi
+                </Text>
+                <Text
+                  style={[styles.infoValue, { color: currentTheme.textMain }]}
+                >
+                  {item.building} - {item.floor}
+                </Text>
+              </View>
+            </View>
 
-                <TouchableOpacity
-                  style={styles.floatingToggleBtn}
-                  onPress={() => setIsMinimized(!isMinimized)}
+            <View style={[styles.infoRow, styles.noBorderBottom]}>
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: "rgba(88, 86, 214, 0.1)" },
+                ]}
+              >
+                <Ionicons name="time" size={22} color={Colors.primary} />
+              </View>
+              <View style={styles.infoTextContainer}>
+                <Text
+                  style={[
+                    styles.infoLabel,
+                    { color: currentTheme.textSecondary },
+                  ]}
                 >
-                  <Ionicons
-                    name={isMinimized ? "expand" : "contract"}
-                    size={28}
-                    color="#FFFFFF"
-                  />
-                </TouchableOpacity>
-              </>
-            )}
+                  Waktu Pelaporan
+                </Text>
+                <Text
+                  style={[styles.infoValue, { color: currentTheme.textMain }]}
+                >
+                  {formatDate(item.created_at)}
+                </Text>
+              </View>
+            </View>
           </View>
 
-          <View
-            style={[
-              styles.modalFooter,
-              { backgroundColor: currentTheme.cardBackground },
-            ]}
-          >
+          <View style={styles.descriptionSection}>
             <Text
-              style={[styles.locationDetail, { color: currentTheme.textMain }]}
+              style={[styles.sectionTitle, { color: currentTheme.textMain }]}
             >
-              {item.building} - {item.floor}
+              Deskripsi Tambahan
             </Text>
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => setIsMapVisible(false)}
+            <Text
+              style={[
+                styles.descriptionText,
+                { color: currentTheme.textSecondary },
+              ]}
             >
-              <Text style={styles.closeBtnText}>Tutup Peta</Text>
-            </TouchableOpacity>
+              {item.description
+                ? item.description
+                : "Pelapor tidak memberikan deskripsi tambahan untuk barang ini."}
+            </Text>
           </View>
+
+          <View style={styles.bottomSpacing} />
+        </View>
+      </ScrollView>
+
+      <View
+        style={[
+          styles.actionFooter,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderTopColor: currentTheme.border,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.primaryActionBtn}
+          onPress={handleContactAction}
+        >
+          <Ionicons
+            name="chatbubbles"
+            size={20}
+            color="#FFFFFF"
+            style={styles.actionIcon}
+          />
+          <Text style={styles.primaryActionText}>
+            {item.type === "lost" ? "Saya Menemukan Ini" : "Ini Barang Saya"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={isFullScreen} transparent={true} animationType="fade">
+        <View style={styles.fullScreenContainer}>
+          <TouchableOpacity
+            style={styles.closeFullScreenBtn}
+            onPress={() => setIsFullScreen(false)}
+          >
+            <Ionicons name="close" size={32} color="#FFFFFF" />
+          </TouchableOpacity>
+          {item?.image_url && (
+            <Image
+              source={{ uri: item.image_url }}
+              style={styles.fullScreenImage}
+            />
+          )}
         </View>
       </Modal>
     </View>
@@ -370,117 +321,145 @@ export default function DetailItem() {
 }
 
 const styles = StyleSheet.create({
-  mainContainer: { flex: 1 },
   container: { flex: 1 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    paddingTop: 10,
-  },
-  headerTitle: { fontSize: 18, fontWeight: "bold" },
-  backButton: { padding: 5 },
-  mainImage: { width: "100%", height: 300, resizeMode: "cover" },
-  noImage: {
-    width: "100%",
-    height: 250,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  content: { padding: 20 },
-  titleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 5,
-  },
-  name: { fontSize: 24, fontWeight: "bold", flex: 1, marginRight: 10 },
-  badge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
-  badgeLost: { backgroundColor: "#FFEFEF" },
-  badgeFound: { backgroundColor: "#EFFFF4" },
-  badgeText: { fontWeight: "bold", fontSize: 12 },
-  category: {
-    fontSize: 16,
-    color: Colors.primary,
-    fontWeight: "600",
-    marginBottom: 20,
-  },
-  infoCard: { padding: 15, borderRadius: 12, borderWidth: 1, marginBottom: 25 },
-  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  infoText: { marginLeft: 10, fontSize: 16 },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-    marginTop: 10,
-  },
-  description: { fontSize: 16, lineHeight: 24, marginBottom: 30 },
-  actionContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 40,
-  },
-  actionButton: {
+  centerContainer: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
     justifyContent: "center",
-    padding: 16,
-    borderRadius: 10,
+    alignItems: "center",
+    padding: 20,
   },
-  mapButton: { backgroundColor: Colors.primary },
-  actionButtonText: { marginLeft: 8, fontSize: 16, fontWeight: "bold" },
-  modalContainer: { flex: 1 },
-  modalHeader: {
+  errorText: { fontSize: 16, marginTop: 15, fontWeight: "500" },
+  backBtnError: {
+    marginTop: 20,
+    paddingHorizontal: 25,
+    paddingVertical: 12,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+  },
+  backBtnErrorText: { color: "#FFFFFF", fontWeight: "bold" },
+  imageContainer: { position: "relative", backgroundColor: "#EAEAEA" },
+  mainImage: { height: 350, resizeMode: "cover" },
+  noImagePlaceholder: {
+    height: 350,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#2A2A2A",
+  },
+  noImageText: { color: "#999999", marginTop: 10, fontSize: 14 },
+  headerFloatingNav: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 50 : 40,
+    left: 20,
+    right: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
+  },
+  floatingBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  floatingBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  badgeLost: { backgroundColor: "#FF3B30" },
+  badgeFound: { backgroundColor: "#34C759" },
+  floatingBadgeText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  contentContainer: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -24,
+    padding: 25,
+    minHeight: 500,
+  },
+  titleSection: { marginBottom: 25 },
+  itemTitle: { fontSize: 26, fontWeight: "bold", marginBottom: 5 },
+  itemCategory: {
+    fontSize: 16,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  infoCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.05)",
+    padding: 15,
+    marginBottom: 25,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
     borderBottomWidth: 1,
   },
-  modalTitle: { fontSize: 18, fontWeight: "bold" },
-  mapViewContainer: {
-    flex: 1,
-    backgroundColor: "#EAEAEA",
+  noBorderBottom: { borderBottomWidth: 0 },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    position: "relative",
+    marginRight: 15,
   },
-  mapCanvas: { position: "relative" },
-  mapImage: { width: "100%", height: "100%", resizeMode: "cover" },
-  pin: { position: "absolute", zIndex: 10 },
-  modalFooter: {
-    padding: 25,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  infoTextContainer: { flex: 1 },
+  infoLabel: { fontSize: 12, marginBottom: 4 },
+  infoValue: { fontSize: 15, fontWeight: "600" },
+  descriptionSection: { marginBottom: 20 },
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
+  descriptionText: { fontSize: 15, lineHeight: 24 },
+  bottomSpacing: { height: 80 },
+  actionFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 35 : 20,
+    borderTopWidth: 1,
+    elevation: 10,
   },
-  locationDetail: {
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  closeBtn: {
+  primaryActionBtn: {
     backgroundColor: Colors.primary,
-    padding: 16,
-    borderRadius: 10,
+    flexDirection: "row",
+    height: 56,
+    borderRadius: 16,
+    justifyContent: "center",
     alignItems: "center",
   },
-  closeBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-  floatingToggleBtn: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    backgroundColor: Colors.primary,
-    padding: 12,
-    borderRadius: 30,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+  actionIcon: { marginRight: 10 },
+  primaryActionText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    letterSpacing: 0.5,
   },
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeFullScreenBtn: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 50 : 40,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 20,
+  },
+  fullScreenImage: { width: "100%", height: "100%", resizeMode: "contain" },
 });
