@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -6,6 +7,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -50,6 +52,7 @@ const CATEGORIES: CategoryOption[] = [
 ];
 
 export default function AdminPanel() {
+  // ── Main view state (approved items, sama seperti Home) ──────────────────
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,81 +61,141 @@ export default function AdminPanel() {
   const [selectedBuilding, setSelectedBuilding] = useState("Semua");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  const { currentTheme } = useAppContext();
+  // ── Moderation modal state ───────────────────────────────────────────────
+  const [isModerationVisible, setIsModerationVisible] = useState(false);
+  const [pendingItems, setPendingItems] = useState<Item[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [pendingTab, setPendingTab] = useState<"lost" | "found">("lost");
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const { currentTheme, isDarkMode } = useAppContext();
 
   const filterBuildings = ["Semua", "Gedung A", "Gedung B", "Gedung C", "Gedung D"];
 
-  const fetchItems = async () => {
+  // ── Role guard ────────────────────────────────────────────────────────────
+  useFocusEffect(
+    useCallback(() => {
+      const checkRole = async () => {
+        try {
+          const raw = await AsyncStorage.getItem("current_user");
+          if (!raw) { router.replace("/(tabs)"); return; }
+          const user = JSON.parse(raw);
+          if (user.role !== "admin") { router.replace("/(tabs)"); return; }
+        } catch {
+          router.replace("/(tabs)");
+        }
+      };
+      checkRole();
+    }, []),
+  );
+
+  // ── Fetch approved items (main view) ──────────────────────────────────────
+  const fetchApprovedItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("items")
         .select("*")
         .eq("type", activeTab)
-        .eq("status", "pending")
+        .eq("status", "approved")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setItems(data || []);
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [activeTab]);
+
+  // ── Fetch pending count (badge) ───────────────────────────────────────────
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const { count } = await supabase
+        .from("items")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+      setPendingCount(count || 0);
+    } catch {}
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      fetchItems();
+      fetchApprovedItems();
+      fetchPendingCount();
     }, [activeTab]),
   );
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchItems();
+    fetchApprovedItems();
+    fetchPendingCount();
   };
 
+  // ── Fetch pending items for modal ─────────────────────────────────────────
+  const fetchPendingItems = useCallback(async () => {
+    try {
+      setPendingLoading(true);
+      const { data, error } = await supabase
+        .from("items")
+        .select("*")
+        .eq("type", pendingTab)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setPendingItems(data || []);
+    } catch {
+    } finally {
+      setPendingLoading(false);
+    }
+  }, [pendingTab]);
+
+  const openModeration = () => {
+    setIsModerationVisible(true);
+    fetchPendingItems();
+  };
+
+  // Re-fetch when pendingTab changes inside modal
+  useFocusEffect(
+    useCallback(() => {}, []), // placeholder, handled via useCallback dep below
+  );
+
+  // ── Moderation actions ────────────────────────────────────────────────────
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      setLoading(true);
       const { error } = await supabase
         .from("items")
         .update({ status: newStatus })
         .eq("id", id);
-
       if (error) throw error;
-      fetchItems();
-    } catch (error) {
+      // refresh both
+      fetchPendingItems();
+      fetchPendingCount();
+      fetchApprovedItems();
+    } catch {
       if (Platform.OS === "web") {
-        window.alert("Gagal: Tidak dapat memperbarui status laporan.");
+        window.alert("Gagal memperbarui status laporan.");
       } else {
-        Alert.alert("Gagal", "Tidak dapat memperbarui status laporan.");
+        Alert.alert("Gagal", "Gagal memperbarui status laporan.");
       }
-      setLoading(false);
     }
   };
 
   const confirmAction = (id: string, newStatus: string) => {
     const actionText = newStatus === "approved" ? "Setujui" : "Tolak";
-
     if (Platform.OS === "web") {
-      const isConfirmed = window.confirm(
-        `Apakah Anda yakin ingin ${actionText.toLowerCase()} laporan ini?`,
-      );
-      if (isConfirmed) handleUpdateStatus(id, newStatus);
+      if (window.confirm(`${actionText} laporan ini?`)) handleUpdateStatus(id, newStatus);
     } else {
-      Alert.alert(
-        `${actionText} Laporan`,
-        `Apakah Anda yakin ingin ${actionText.toLowerCase()} laporan ini?`,
-        [
-          { text: "Batal", style: "cancel" },
-          {
-            text: `Ya, ${actionText}`,
-            style: newStatus === "rejected" ? "destructive" : "default",
-            onPress: () => handleUpdateStatus(id, newStatus),
-          },
-        ],
-      );
+      Alert.alert(`${actionText} Laporan`, `Yakin ingin ${actionText.toLowerCase()} laporan ini?`, [
+        { text: "Batal", style: "cancel" },
+        {
+          text: `Ya, ${actionText}`,
+          style: newStatus === "rejected" ? "destructive" : "default",
+          onPress: () => handleUpdateStatus(id, newStatus),
+        },
+      ]);
     }
   };
 
@@ -152,12 +215,7 @@ export default function AdminPanel() {
     setSearchQuery("");
   };
 
-  const resetFilters = () => {
-    setSelectedCategory("All");
-    setSelectedBuilding("Semua");
-    setSearchQuery("");
-  };
-
+  // ── Filtered main list ────────────────────────────────────────────────────
   const filteredItems = items.filter((item) => {
     const matchSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -170,107 +228,150 @@ export default function AdminPanel() {
     return matchSearch && matchBuilding && matchCategory;
   });
 
-  const hasActiveFilter =
-    selectedCategory !== "All" ||
-    selectedBuilding !== "Semua" ||
-    searchQuery !== "";
-
-  const renderItem = ({ item }: { item: Item }) => {
-    return (
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-        ]}
-      >
-        <TouchableOpacity onPress={() => router.push(`/detail/${item.id}`)}>
-          <View style={styles.imageWrapper}>
-            {item.image_url ? (
-              <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-            ) : (
-              <View
-                style={[styles.noImageContainer, { backgroundColor: currentTheme.background }]}
-              >
-                <Ionicons name="image-outline" size={40} color={currentTheme.textSecondary} />
-              </View>
-            )}
-
-            <View style={styles.categoryOverlay}>
-              <Text style={styles.categoryOverlayText}>{item.category}</Text>
-            </View>
-
-            <View
-              style={[
-                styles.typeBadgeOverlay,
-                activeTab === "lost" ? styles.typeBadgeLost : styles.typeBadgeFound,
-              ]}
-            >
-              <Text style={styles.typeBadgeOverlayText}>
-                {activeTab === "lost" ? "Hilang" : "Ditemukan"}
-              </Text>
-            </View>
+  // ── Render: main grid card (sama seperti Home) ────────────────────────────
+  const renderMainCard = ({ item }: { item: Item }) => (
+    <TouchableOpacity
+      style={[
+        styles.card,
+        { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+      ]}
+      onPress={() => router.push(`/detail/${item.id}`)}
+    >
+      <View style={styles.imageWrapper}>
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+        ) : (
+          <View style={[styles.noImageContainer, { backgroundColor: currentTheme.background }]}>
+            <Ionicons name="image-outline" size={40} color={currentTheme.textSecondary} />
           </View>
-
-          <View style={styles.cardContent}>
-            <Text
-              style={[styles.itemName, { color: currentTheme.textMain }]}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
-
-            <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={14} color={currentTheme.textSecondary} />
-              <Text style={[styles.locationText, { color: currentTheme.textSecondary }]}>
-                {item.building} · {item.floor}
-              </Text>
-            </View>
-
-            <View style={styles.dateRow}>
-              <Ionicons name="time-outline" size={13} color={currentTheme.textSecondary} />
-              <Text style={[styles.dateText, { color: currentTheme.textSecondary }]}>
-                {formatDate(item.created_at)}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => confirmAction(item.id, "rejected")}
-          >
-            <Ionicons name="close-circle-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Tolak</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.approveButton]}
-            onPress={() => confirmAction(item.id, "approved")}
-          >
-            <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Setujui</Text>
-          </TouchableOpacity>
+        )}
+        <View style={styles.categoryOverlay}>
+          <Text style={styles.categoryOverlayText}>{item.category}</Text>
+        </View>
+        <View
+          style={[
+            styles.typeBadgeOverlay,
+            item.type === "lost" ? styles.typeBadgeLost : styles.typeBadgeFound,
+          ]}
+        >
+          <Text style={styles.typeBadgeOverlayText}>
+            {item.type === "lost" ? "Hilang" : "Ditemukan"}
+          </Text>
         </View>
       </View>
-    );
-  };
 
+      <View style={styles.cardContent}>
+        <Text style={[styles.itemName, { color: currentTheme.textMain }]} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <View style={styles.locationRow}>
+          <Ionicons name="location-outline" size={14} color={currentTheme.textSecondary} />
+          <Text style={[styles.locationText, { color: currentTheme.textSecondary }]}>
+            {item.building} · {item.floor}
+          </Text>
+        </View>
+        <View style={styles.dateRow}>
+          <Ionicons name="time-outline" size={13} color={currentTheme.textSecondary} />
+          <Text style={[styles.dateText, { color: currentTheme.textSecondary }]}>
+            {formatDate(item.created_at)}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  // ── Render: pending card inside moderation modal ──────────────────────────
+  const renderPendingCard = ({ item }: { item: Item }) => (
+    <View
+      style={[
+        styles.pendingCard,
+        { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+      ]}
+    >
+      <TouchableOpacity
+        style={styles.pendingCardTop}
+        onPress={() => {
+          setIsModerationVisible(false);
+          router.push(`/detail/${item.id}`);
+        }}
+      >
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.pendingThumb} />
+        ) : (
+          <View style={[styles.pendingThumbEmpty, { backgroundColor: currentTheme.background }]}>
+            <Ionicons name="image-outline" size={24} color={currentTheme.textSecondary} />
+          </View>
+        )}
+        <View style={styles.pendingCardText}>
+          <Text style={[styles.pendingItemName, { color: currentTheme.textMain }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={[styles.pendingMeta, { color: currentTheme.textSecondary }]}>
+            {item.category} · {item.building} · {item.floor}
+          </Text>
+          <Text style={[styles.pendingDate, { color: currentTheme.textSecondary }]}>
+            {formatDate(item.created_at)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      <View style={[styles.pendingActionRow, { borderTopColor: currentTheme.border }]}>
+        <TouchableOpacity
+          style={[styles.pendingActionBtn, styles.rejectBtn]}
+          onPress={() => confirmAction(item.id, "rejected")}
+        >
+          <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+          <Text style={styles.pendingActionText}>Tolak</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.pendingActionBtn, styles.approveBtn]}
+          onPress={() => confirmAction(item.id, "approved")}
+        >
+          <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+          <Text style={styles.pendingActionText}>Setujui</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1A1A1A" />
+      <StatusBar
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
+        backgroundColor={currentTheme.background}
+      />
       <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-        {/* Top Header */}
+
+        {/* Header — sama seperti Home tapi ada icon moderasi */}
         <View style={styles.topHeader}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={styles.topHeaderTitle}>ADMIN PANEL</Text>
-          <TouchableOpacity onPress={() => router.replace("/")} style={styles.backButton}>
-            <Ionicons name="log-out-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+          <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
+          <View style={styles.headerIcons}>
+            {/* History */}
+            <TouchableOpacity
+              onPress={() => router.push("/history")}
+              style={styles.iconButton}
+            >
+              <Ionicons name="time" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            {/* Moderation icon + badge */}
+            <TouchableOpacity onPress={openModeration} style={styles.iconButton}>
+              <View>
+                <Ionicons name="shield-checkmark-outline" size={22} color="#FFFFFF" />
+                {pendingCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {pendingCount > 99 ? "99+" : pendingCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Tabs */}
+        {/* Lost / Found Tabs */}
         <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[
@@ -287,7 +388,7 @@ export default function AdminPanel() {
                 activeTab === "lost" && { color: Colors.primary },
               ]}
             >
-              Moderasi Lost
+              Lost Items
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -305,7 +406,7 @@ export default function AdminPanel() {
                 activeTab === "found" && { color: Colors.primary },
               ]}
             >
-              Moderasi Found
+              Found Items
             </Text>
           </TouchableOpacity>
         </View>
@@ -320,7 +421,7 @@ export default function AdminPanel() {
           >
             <TextInput
               style={[styles.searchInput, { color: currentTheme.textMain }]}
-              placeholder="Cari data laporan..."
+              placeholder={`Search ${activeTab} item`}
               placeholderTextColor={currentTheme.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -410,49 +511,40 @@ export default function AdminPanel() {
         {!loading && (
           <View style={styles.resultsBar}>
             <Text style={[styles.resultsCount, { color: currentTheme.textSecondary }]}>
-              {filteredItems.length} laporan menunggu moderasi
+              {filteredItems.length} item ditemukan
             </Text>
           </View>
         )}
 
-        {/* List */}
+        {/* Main grid list */}
         {loading ? (
           <View style={styles.centerContent}>
             <ActivityIndicator size="large" color={Colors.primary} />
           </View>
         ) : filteredItems.length === 0 ? (
           <View style={styles.centerContent}>
-            {hasActiveFilter ? (
-              <>
-                <Ionicons name="search-outline" size={60} color={currentTheme.iconEmpty} />
-                <Text style={[styles.emptyTitle, { color: currentTheme.textMain }]}>
-                  Tidak Ada Hasil
-                </Text>
-                <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-                  Tidak ada laporan yang cocok dengan filter aktif.
-                </Text>
-                <TouchableOpacity style={styles.emptyActionBtn} onPress={resetFilters}>
-                  <Ionicons name="refresh-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.emptyActionBtnText}>Reset Filter</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Ionicons name="shield-checkmark-outline" size={60} color={currentTheme.iconEmpty} />
-                <Text style={[styles.emptyTitle, { color: currentTheme.textMain }]}>
-                  Semua Bersih!
-                </Text>
-                <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-                  Tidak ada laporan yang menunggu moderasi saat ini.
-                </Text>
-              </>
-            )}
+            <Ionicons name="search-outline" size={60} color={currentTheme.iconEmpty} />
+            <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+              Tidak ada data yang sesuai.
+            </Text>
           </View>
         ) : (
           <FlatList
-            data={filteredItems}
+            data={
+              filteredItems.length % 2 !== 0
+                ? [...filteredItems, { id: "__placeholder__" } as any]
+                : filteredItems
+            }
             keyExtractor={(item) => item.id}
-            renderItem={renderItem}
+            renderItem={({ item }) =>
+              item.id === "__placeholder__" ? (
+                <View style={styles.cardPlaceholder} />
+              ) : (
+                renderMainCard({ item })
+              )
+            }
+            numColumns={2}
+            columnWrapperStyle={styles.columnWrapper}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
             refreshControl={
@@ -465,27 +557,191 @@ export default function AdminPanel() {
           />
         )}
       </View>
+
+      {/* ── Moderation Modal ─────────────────────────────────────────────── */}
+      <Modal
+        visible={isModerationVisible}
+        animationType="slide"
+        onRequestClose={() => setIsModerationVisible(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: currentTheme.background }]}>
+          {/* Modal header */}
+          <View style={[styles.modalHeader, { borderBottomColor: currentTheme.border, backgroundColor: Colors.primary }]}>
+            <TouchableOpacity onPress={() => setIsModerationVisible(false)}>
+              <Ionicons name="close" size={26} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Moderasi Laporan</Text>
+            <View style={{ width: 26 }} />
+          </View>
+
+          {/* Pending tab Lost/Found */}
+          <View style={[styles.tabContainer, { borderBottomColor: currentTheme.border }]}>
+            <TouchableOpacity
+              style={[
+                styles.tabButton,
+                { borderBottomColor: currentTheme.border },
+                pendingTab === "lost" && { borderBottomColor: Colors.primary },
+              ]}
+              onPress={() => {
+                setPendingTab("lost");
+                // trigger fetch via useEffect below
+              }}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: currentTheme.textSecondary },
+                  pendingTab === "lost" && { color: Colors.primary },
+                ]}
+              >
+                Lost
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tabButton,
+                { borderBottomColor: currentTheme.border },
+                pendingTab === "found" && { borderBottomColor: Colors.primary },
+              ]}
+              onPress={() => {
+                setPendingTab("found");
+              }}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: currentTheme.textSecondary },
+                  pendingTab === "found" && { color: Colors.primary },
+                ]}
+              >
+                Found
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Pending list */}
+          <PendingList
+            pendingTab={pendingTab}
+            currentTheme={currentTheme}
+            renderPendingCard={renderPendingCard}
+            pendingLoading={pendingLoading}
+            pendingItems={pendingItems}
+            fetchPendingItems={fetchPendingItems}
+          />
+        </View>
+      </Modal>
+
+      {/* ── Manual Tab Bar ───────────────────────────────────────────────── */}
+      <View style={[styles.tabBar, { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border }]}>
+        <View style={styles.tabBarItem}>
+          <Ionicons name="home" size={24} color={Colors.primary} />
+          <Text style={[styles.tabBarLabel, { color: Colors.primary }]}>Home</Text>
+        </View>
+
+        <TouchableOpacity style={styles.tabBarFabWrap} onPress={() => router.push("/report")}>
+          <View style={[styles.tabBarFabInner, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <Ionicons name="add" size={32} color={Colors.primary} />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push("/(tabs)/profile")}>
+          <Ionicons name="person-outline" size={24} color={currentTheme.textSecondary} />
+          <Text style={[styles.tabBarLabel, { color: currentTheme.textSecondary }]}>Profile</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
+// ── Sub-component to handle pendingTab change effect ─────────────────────────
+function PendingList({
+  pendingTab,
+  currentTheme,
+  renderPendingCard,
+  pendingLoading,
+  pendingItems,
+  fetchPendingItems,
+}: {
+  pendingTab: "lost" | "found";
+  currentTheme: any;
+  renderPendingCard: any;
+  pendingLoading: boolean;
+  pendingItems: Item[];
+  fetchPendingItems: () => void;
+}) {
+  React.useEffect(() => {
+    fetchPendingItems();
+  }, [pendingTab]);
+
+  if (pendingLoading) {
+    return (
+      <View style={styles.centerContent}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  if (pendingItems.length === 0) {
+    return (
+      <View style={styles.centerContent}>
+        <Ionicons name="shield-checkmark-outline" size={60} color={currentTheme.iconEmpty} />
+        <Text style={[styles.emptyTitle, { color: currentTheme.textMain }]}>Semua Bersih!</Text>
+        <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+          Tidak ada laporan yang menunggu moderasi.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={pendingItems}
+      keyExtractor={(item) => item.id}
+      renderItem={renderPendingCard}
+      contentContainerStyle={styles.pendingListContainer}
+      showsVerticalScrollIndicator={false}
+    />
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  // Header
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 12,
     backgroundColor: Colors.primary,
   },
-  backButton: { padding: 5 },
   topHeaderTitle: { fontSize: 18, fontWeight: "bold", color: "#FFFFFF", letterSpacing: 1 },
+  headerIcons: { flexDirection: "row", alignItems: "center" },
+  iconButton: { marginLeft: 15 },
 
+  // Badge
+  badge: {
+    position: "absolute",
+    top: -6,
+    right: -8,
+    backgroundColor: "#FF3B30",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "bold" },
+
+  // Tabs
   tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
   tabButton: { flex: 1, paddingVertical: 10, alignItems: "center", borderBottomWidth: 2 },
   tabText: { fontSize: 14, fontWeight: "600" },
 
+  // Search
   searchSection: { paddingHorizontal: 20, paddingTop: 12, marginBottom: 10 },
   searchBar: {
     flexDirection: "row",
@@ -498,6 +754,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14 },
   searchIcon: { marginLeft: 10 },
 
+  // Category
   categorySection: { paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
   categorySectionLabel: {
     fontSize: 11,
@@ -520,66 +777,136 @@ const styles = StyleSheet.create({
   },
   categoryChipText: { fontSize: 12, fontWeight: "500" },
 
+  // Building filter
   filterSection: { marginTop: 10, marginBottom: 4 },
   filterScroll: { paddingHorizontal: 20 },
   filterChip: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 8, borderWidth: 1, marginRight: 8 },
   filterChipText: { fontSize: 12, fontWeight: "500" },
 
+  // Results
   resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
   resultsCount: { fontSize: 12 },
 
-  listContainer: { paddingHorizontal: 20, paddingBottom: 100 },
-  centerContent: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 30 },
+  // Grid list
+  listContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
+  columnWrapper: { gap: 10, marginBottom: 10 },
 
-  emptyTitle: { fontSize: 17, fontWeight: "bold", marginTop: 14, marginBottom: 6 },
-  emptyText: { fontSize: 14, textAlign: "center", marginBottom: 20 },
-  emptyActionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  emptyActionBtnText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 14 },
-
-  card: { borderRadius: 12, overflow: "hidden", marginBottom: 15, borderWidth: 1 },
+  // Main grid card
+  card: { flex: 1, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
   imageWrapper: { position: "relative" },
-  cardImage: { width: "100%", height: 150, resizeMode: "cover" },
-  noImageContainer: { width: "100%", height: 150, justifyContent: "center", alignItems: "center" },
-
+  cardImage: { width: "100%", height: 120, resizeMode: "cover" },
+  noImageContainer: { width: "100%", height: 120, justifyContent: "center", alignItems: "center" },
   categoryOverlay: {
     position: "absolute",
-    bottom: 8,
-    left: 8,
+    bottom: 6,
+    left: 6,
     backgroundColor: "rgba(0,0,0,0.55)",
     borderRadius: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
-  categoryOverlayText: { color: "#FFFFFF", fontSize: 11, fontWeight: "600" },
+  categoryOverlayText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
   typeBadgeOverlay: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
     borderRadius: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   typeBadgeLost: { backgroundColor: "rgba(226,75,74,0.85)" },
   typeBadgeFound: { backgroundColor: "rgba(59,109,17,0.85)" },
-  typeBadgeOverlayText: { color: "#FFFFFF", fontSize: 11, fontWeight: "600" },
+  typeBadgeOverlayText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
+  cardContent: { padding: 10 },
+  itemName: { fontSize: 13, fontWeight: "600", marginBottom: 5 },
+  locationRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 3 },
+  locationText: { fontSize: 11, flex: 1 },
+  dateRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  dateText: { fontSize: 11 },
+  cardPlaceholder: { flex: 1, borderRadius: 12, overflow: "hidden", backgroundColor: "transparent" },
 
-  cardContent: { padding: 12 },
-  itemName: { fontSize: 16, fontWeight: "bold", marginBottom: 6 },
-  locationRow: { flexDirection: "row", alignItems: "center", marginBottom: 5, gap: 4 },
-  locationText: { fontSize: 13 },
-  dateRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  dateText: { fontSize: 12 },
+  // Empty / center
+  centerContent: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 30 },
+  emptyTitle: { fontSize: 17, fontWeight: "bold", marginTop: 14, marginBottom: 6 },
+  emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
 
-  actionRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.1)" },
-  actionButton: { flex: 1, flexDirection: "row", padding: 12, justifyContent: "center", alignItems: "center" },
-  rejectButton: { backgroundColor: "#FF3B30" },
-  approveButton: { backgroundColor: "#34C759" },
-  actionButtonText: { color: "#FFFFFF", fontWeight: "bold", marginLeft: 8 },
+  // Moderation modal
+  modalContainer: { flex: 1 },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingTop: Platform.OS === "ios" ? 54 : 14,
+    borderBottomWidth: 1,
+  },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: "#FFFFFF" },
+
+  // Pending card (inside modal, horizontal layout)
+  pendingListContainer: { padding: 16, paddingBottom: 60 },
+  pendingCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  pendingCardTop: { flexDirection: "row", padding: 12, alignItems: "center" },
+  pendingThumb: { width: 72, height: 72, borderRadius: 8, resizeMode: "cover" },
+  pendingThumbEmpty: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pendingCardText: { flex: 1, marginLeft: 12 },
+  pendingItemName: { fontSize: 15, fontWeight: "700", marginBottom: 4 },
+  pendingMeta: { fontSize: 12, marginBottom: 3 },
+  pendingDate: { fontSize: 11 },
+  pendingActionRow: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+  },
+  pendingActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 11,
+    gap: 6,
+  },
+  rejectBtn: { backgroundColor: "#FF3B30" },
+  approveBtn: { backgroundColor: "#34C759" },
+  pendingActionText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 14 },
+
+  // Manual tab bar
+  tabBar: {
+    flexDirection: "row",
+    height: 70,
+    paddingBottom: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  tabBarItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabBarLabel: { fontSize: 11, marginTop: 2 },
+  tabBarFabWrap: {
+    top: -25,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tabBarFabInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });

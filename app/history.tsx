@@ -41,6 +41,7 @@ const CATEGORIES: CategoryOption[] = [
   { label: "Elektronik", value: "Elektronik", icon: "phone-portrait-outline" },
   { label: "Alat Makan", value: "Alat Makan", icon: "restaurant-outline" },
   { label: "Pakaian", value: "Pakaian", icon: "shirt-outline" },
+  { label: "Kunci", value: "Kunci", icon: "key-outline" },
   { label: "Accesories", value: "Accesories", icon: "glasses-outline" },
   { label: "Lainnya", value: "Lainnya", icon: "cube-outline" },
 ];
@@ -108,38 +109,21 @@ export default function History() {
   const handleCancelReport = (id: string) => {
     if (Platform.OS === "web") {
       const isConfirmed = window.confirm(
-        "Laporan ini belum disetujui. Yakin ingin membatalkan dan menghapusnya dari database?",
+        "Yakin ingin menghapus laporan ini dari database?",
       );
       if (isConfirmed) executeDelete(id);
     } else {
       Alert.alert(
-        "Batalkan Laporan",
-        "Laporan ini belum disetujui. Yakin ingin membatalkan dan menghapusnya dari database?",
+        "Hapus Laporan",
+        "Yakin ingin menghapus laporan ini dari database?",
         [
-          { text: "Kembali", style: "cancel" },
-          { text: "Ya, Batalkan", style: "destructive", onPress: () => executeDelete(id) },
+          { text: "Batal", style: "cancel" },
+          { text: "Ya, Hapus", style: "destructive", onPress: () => executeDelete(id) },
         ],
       );
     }
   };
 
-  const handleMarkAsDone = (id: string) => {
-    if (Platform.OS === "web") {
-      const isConfirmed = window.confirm(
-        "Apakah barang Anda sudah ditemukan? Laporan ini akan ditandai selesai dan dihapus dari database.",
-      );
-      if (isConfirmed) executeDelete(id);
-    } else {
-      Alert.alert(
-        "Selesaikan Laporan",
-        "Apakah barang Anda sudah ditemukan? Laporan ini akan ditandai selesai dan dihapus dari database.",
-        [
-          { text: "Batal", style: "cancel" },
-          { text: "Ya, Selesai", style: "default", onPress: () => executeDelete(id) },
-        ],
-      );
-    }
-  };
 
   const getStatusBadge = (status: string | null) => {
     const safeStatus = status || "pending";
@@ -220,23 +204,13 @@ export default function History() {
           </View>
         </TouchableOpacity>
 
-        {/* Lost: pending → bisa dibatalkan */}
-        {item.type === "lost" && amanStatus === "pending" && (
+        {/* Lost: semua status → user bisa hapus laporan miliknya sendiri */}
+        {item.type === "lost" && (
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => handleCancelReport(item.id)}
           >
             <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
-
-        {/* Lost: approved → bisa ditandai selesai */}
-        {item.type === "lost" && amanStatus === "approved" && (
-          <TouchableOpacity
-            style={styles.doneBtn}
-            onPress={() => handleMarkAsDone(item.id)}
-          >
-            <Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         )}
       </View>
@@ -482,12 +456,6 @@ const styles = StyleSheet.create({
   // Action buttons (ujung kanan card)
   deleteBtn: {
     backgroundColor: "#FF3B30",
-    width: 52,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  doneBtn: {
-    backgroundColor: "#34C759",
     width: 52,
     justifyContent: "center",
     alignItems: "center",

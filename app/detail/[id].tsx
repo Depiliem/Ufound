@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -118,11 +119,25 @@ export default function ItemDetail() {
   const [loading, setLoading] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { currentTheme } = useAppContext();
 
   const screenWidth = Dimensions.get("window").width;
   const mapCanvasWidth = screenWidth - 80;
   const mapCanvasHeight = mapCanvasWidth * (900 / 1250);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const raw = await AsyncStorage.getItem("current_user");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setIsAdmin(parsed.role === "admin");
+        }
+      } catch {}
+    };
+    loadUser();
+  }, []);
 
   useEffect(() => {
     const fetchItemDetail = async () => {
@@ -165,11 +180,28 @@ export default function ItemDetail() {
     return data.publicUrl;
   };
 
-  const handleContactAction = () => {
+  const handleAdminDelete = () => {
+    const doDelete = async () => {
+      try {
+        const { error } = await supabase.from("items").delete().eq("id", item!.id);
+        if (error) throw error;
+        router.back();
+      } catch {
+        if (Platform.OS === "web") {
+          window.alert("Gagal menghapus laporan.");
+        } else {
+          Alert.alert("Gagal", "Gagal menghapus laporan.");
+        }
+      }
+    };
+
     if (Platform.OS === "web") {
-      window.alert("Fitur kontak akan diaktifkan setelah sistem autentikasi selesai.");
+      if (window.confirm("Hapus laporan ini dari database?")) doDelete();
     } else {
-      Alert.alert("Informasi", "Fitur kontak akan diaktifkan setelah sistem autentikasi selesai.");
+      Alert.alert("Hapus Laporan", "Hapus laporan ini dari database?", [
+        { text: "Batal", style: "cancel" },
+        { text: "Ya, Hapus", style: "destructive", onPress: doDelete },
+      ]);
     }
   };
 
@@ -287,19 +319,19 @@ export default function ItemDetail() {
         </View>
       </ScrollView>
 
-      <View
-        style={[
-          styles.actionFooter,
-          { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border },
-        ]}
-      >
-        <TouchableOpacity style={styles.primaryActionBtn} onPress={handleContactAction}>
-          <Ionicons name="chatbubbles" size={20} color="#FFFFFF" style={styles.actionIcon} />
-          <Text style={styles.primaryActionText}>
-            {item.type === "lost" ? "Saya Menemukan Ini" : "Ini Barang Saya"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {isAdmin && (
+        <View
+          style={[
+            styles.actionFooter,
+            { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border },
+          ]}
+        >
+          <TouchableOpacity style={styles.deleteActionBtn} onPress={handleAdminDelete}>
+            <Ionicons name="trash-outline" size={20} color="#FFFFFF" style={styles.actionIcon} />
+            <Text style={styles.deleteActionText}>Hapus Laporan</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <Modal
         visible={isFullScreen}
@@ -420,8 +452,10 @@ const styles = StyleSheet.create({
   descriptionText: { fontSize: 15, lineHeight: 24 },
   bottomSpacing: { height: 80 },
   actionFooter: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 20, paddingBottom: Platform.OS === "ios" ? 35 : 20, borderTopWidth: 1, elevation: 10 },
-  primaryActionBtn: { backgroundColor: Colors.primary, flexDirection: "row", height: 56, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  deleteActionBtn: { backgroundColor: "#FF3B30", flexDirection: "row", height: 56, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  deleteActionText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", letterSpacing: 0.5 },
   actionIcon: { marginRight: 10 },
+  primaryActionBtn: { backgroundColor: Colors.primary, flexDirection: "row", height: 56, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   primaryActionText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", letterSpacing: 0.5 },
   fullScreenContainer: { flex: 1, backgroundColor: "#000000", justifyContent: "center", alignItems: "center" },
   closeFullScreenBtn: { position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 20, zIndex: 999, padding: 12, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 30 },
