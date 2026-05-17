@@ -1,52 +1,34 @@
+import { useAppContext } from "@/context/AppContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, router } from "expo-router";
-import React, { useEffect } from "react"; 
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Colors } from "../../constants/Colors";
-import * as Notifications from "expo-notifications";
-
-// [FITUR BARU] Mesin utama biar HP lu GETER dan BUNYI pas notif masuk
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true, // Kunci utama buat bunyi & geter
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 function CustomTabBarButton({ children, onPress }: any) {
+  const { currentTheme } = useAppContext();
   return (
     <TouchableOpacity style={styles.customButtonContainer} onPress={onPress}>
-      <View style={styles.customButton}>{children}</View>
+      <View style={[styles.customButton,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}>{children}</View>
     </TouchableOpacity>
   );
 }
 
+
+
 export default function TabLayout() {
-  // Listener buat nangkap klik notifikasi
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const urlTujuan = response.notification.request.content.data?.url;
-      
-      if (urlTujuan) {
-        // Otomatis loncat ke halaman detail barang pas notif dipencet
-        router.push(urlTujuan as any);
-      }
-    });
-
-    // Bersihin memori pas komponen ditutup
-    return () => subscription.remove();
-  }, []);
-
+  const { currentTheme } = useAppContext();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, , { backgroundColor: currentTheme.cardBackground }],
         tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textSecondary,
+        tabBarInactiveTintColor: currentTheme.textSecondary,
       }}
     >
       <Tabs.Screen
