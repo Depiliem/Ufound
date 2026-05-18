@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -47,6 +48,18 @@ const CATEGORIES: CategoryOption[] = [
   { label: "Lainnya", value: "Lainnya", icon: "cube-outline" },
 ];
 
+// ── Fungsi Helper Parsing Thumbnail ──────────────────────────────────────────
+const getThumbnail = (urlData: string | null) => {
+  if (!urlData) return null;
+  try {
+    const parsed = JSON.parse(urlData);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+    return urlData;
+  } catch {
+    return urlData;
+  }
+};
+
 export default function Home() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +68,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBuilding, setSelectedBuilding] = useState("Semua");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [roleChecked, setRoleChecked] = useState(false);
 
   const { isDarkMode, currentTheme } = useAppContext();
 
@@ -65,6 +79,38 @@ export default function Home() {
     "Gedung C",
     "Gedung D",
   ];
+
+  // ── Role guard — runs EVERY time this screen is focused ─────────────────
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const checkRole = async () => {
+        try {
+          const raw = await AsyncStorage.getItem("current_user");
+          if (!raw) return;
+          const user = JSON.parse(raw);
+          if (user?.role === "admin") {
+            router.replace("/admin");
+            return;
+          }
+        } catch {}
+        if (!cancelled) setRoleChecked(true);
+      };
+      checkRole();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  // ── Fetch items — only after role check passes ────────────────────────────
+  useFocusEffect(
+    useCallback(() => {
+      if (!roleChecked) return;
+      setLoading(true);
+      fetchItems();
+    }, [activeTab, roleChecked]),
+  );
 
   const fetchItems = async () => {
     try {
@@ -77,19 +123,12 @@ export default function Home() {
 
       if (error) return;
       setItems(data || []);
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
-
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      fetchItems();
-    }, [activeTab]),
-  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -124,90 +163,110 @@ export default function Home() {
     setSearchQuery("");
   };
 
-  const renderItem = ({ item }: { item: Item }) => (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        {
-          backgroundColor: currentTheme.cardBackground,
-          borderColor: currentTheme.border,
-        },
-      ]}
-      onPress={() => router.push(`/detail/${item.id}`)}
-    >
-      {/* Image with category badge overlay */}
-      <View style={styles.imageWrapper}>
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-        ) : (
+  // Render loading spinner while role check is pending
+  if (!roleChecked) {
+    return (
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: currentTheme.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  const renderItem = ({ item }: { item: Item }) => {
+    const thumbnailUri = getThumbnail(item.image_url);
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.card,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}
+        onPress={() => router.push(`/detail/${item.id}`)}
+      >
+        <View style={styles.imageWrapper}>
+          {thumbnailUri ? (
+            <Image source={{ uri: thumbnailUri }} style={styles.cardImage} />
+          ) : (
+            <View
+              style={[
+                styles.noImageContainer,
+                { backgroundColor: currentTheme.background },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={40}
+                color={currentTheme.textSecondary}
+              />
+            </View>
+          )}
+          <View style={styles.categoryOverlay}>
+            <Text style={styles.categoryOverlayText}>{item.category}</Text>
+          </View>
           <View
             style={[
-              styles.noImageContainer,
-              { backgroundColor: currentTheme.background },
+              styles.typeBadgeOverlay,
+              activeTab === "lost"
+                ? styles.typeBadgeLost
+                : styles.typeBadgeFound,
             ]}
           >
+            <Text style={styles.typeBadgeOverlayText}>
+              {activeTab === "lost" ? "Hilang" : "Ditemukan"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.cardContent}>
+          <Text
+            style={[styles.itemName, { color: currentTheme.textMain }]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <View style={styles.locationRow}>
             <Ionicons
-              name="image-outline"
-              size={40}
+              name="location-outline"
+              size={14}
               color={currentTheme.textSecondary}
             />
+            <Text
+              style={[
+                styles.locationText,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {item.building} · {item.floor}
+            </Text>
           </View>
-        )}
-
-        {/* Category badge overlay */}
-        <View style={styles.categoryOverlay}>
-          <Text style={styles.categoryOverlayText}>{item.category}</Text>
+          <View style={styles.dateRow}>
+            <Ionicons
+              name="time-outline"
+              size={13}
+              color={currentTheme.textSecondary}
+            />
+            <Text
+              style={[styles.dateText, { color: currentTheme.textSecondary }]}
+            >
+              {formatDate(item.created_at)}
+            </Text>
+          </View>
         </View>
-
-        {/* Type badge overlay */}
-        <View
-          style={[
-            styles.typeBadgeOverlay,
-            activeTab === "lost" ? styles.typeBadgeLost : styles.typeBadgeFound,
-          ]}
-        >
-          <Text style={styles.typeBadgeOverlayText}>
-            {activeTab === "lost" ? "Hilang" : "Ditemukan"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.cardContent}>
-        <Text
-          style={[styles.itemName, { color: currentTheme.textMain }]}
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-
-        <View style={styles.locationRow}>
-          <Ionicons
-            name="location-outline"
-            size={14}
-            color={currentTheme.textSecondary}
-          />
-          <Text
-            style={[styles.locationText, { color: currentTheme.textSecondary }]}
-          >
-            {item.building} · {item.floor}
-          </Text>
-        </View>
-
-        <View style={styles.dateRow}>
-          <Ionicons
-            name="time-outline"
-            size={13}
-            color={currentTheme.textSecondary}
-          />
-          <Text
-            style={[styles.dateText, { color: currentTheme.textSecondary }]}
-          >
-            {formatDate(item.created_at)}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -227,12 +286,6 @@ export default function Home() {
               style={styles.iconButton}
             >
               <Ionicons name="time" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push("/admin")}
-              style={styles.adminRouteBtn}
-            >
-              <Text style={styles.adminRouteText}>ADMIN</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -306,7 +359,12 @@ export default function Home() {
 
         {/* Category Filter */}
         <View style={styles.categorySection}>
-          <Text style={[styles.categorySectionLabel, { color: currentTheme.textSecondary }]}>
+          <Text
+            style={[
+              styles.categorySectionLabel,
+              { color: currentTheme.textSecondary },
+            ]}
+          >
             Category
           </Text>
           <ScrollView
@@ -341,7 +399,9 @@ export default function Home() {
                     style={[
                       styles.categoryChipText,
                       {
-                        color: isActive ? "#FFFFFF" : currentTheme.textSecondary,
+                        color: isActive
+                          ? "#FFFFFF"
+                          : currentTheme.textSecondary,
                       },
                     ]}
                   >
@@ -396,7 +456,12 @@ export default function Home() {
         {/* Results count */}
         {!loading && (
           <View style={styles.resultsBar}>
-            <Text style={[styles.resultsCount, { color: currentTheme.textSecondary }]}>
+            <Text
+              style={[
+                styles.resultsCount,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
               {filteredItems.length} item ditemukan
             </Text>
           </View>
@@ -471,21 +536,7 @@ const styles = StyleSheet.create({
   },
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
-  adminRouteBtn: {
-    marginLeft: 15,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  adminRouteText: { color: Colors.primary, fontWeight: "bold", fontSize: 12 },
-
-  // Tabs
-  tabContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    marginBottom: 0,
-  },
+  tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
   tabButton: {
     flex: 1,
     paddingVertical: 10,
@@ -493,8 +544,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
   },
   tabText: { fontSize: 14, fontWeight: "600" },
-
-  // Search
   searchSection: { paddingHorizontal: 20, paddingTop: 12, marginBottom: 10 },
   searchBar: {
     flexDirection: "row",
@@ -506,8 +555,6 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14 },
   searchIcon: { marginLeft: 10 },
-
-  // Category chips
   categorySection: {
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -533,8 +580,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   categoryChipText: { fontSize: 12, fontWeight: "500" },
-
-  // Building filter
   filterSection: { marginTop: 10, marginBottom: 4 },
   filterScroll: { paddingHorizontal: 20 },
   filterChip: {
@@ -545,29 +590,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipText: { fontSize: 12, fontWeight: "500" },
-
-  // Results bar
-  resultsBar: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
+  resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
   resultsCount: { fontSize: 12 },
-
-  // Grid list
   listContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 },
   columnWrapper: { gap: 10, marginBottom: 10 },
-
-  // Card (grid style)
-  card: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  imageWrapper: {
-    position: "relative",
-  },
+  card: { flex: 1, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
+  imageWrapper: { position: "relative" },
   cardImage: { width: "100%", height: 120, resizeMode: "cover" },
   noImageContainer: {
     width: "100%",
@@ -575,8 +603,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
-  // Overlays on image
   categoryOverlay: {
     position: "absolute",
     bottom: 6,
@@ -586,11 +612,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  categoryOverlayText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "600",
-  },
+  categoryOverlayText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
   typeBadgeOverlay: {
     position: "absolute",
     top: 6,
@@ -601,29 +623,24 @@ const styles = StyleSheet.create({
   },
   typeBadgeLost: { backgroundColor: "rgba(226,75,74,0.85)" },
   typeBadgeFound: { backgroundColor: "rgba(59,109,17,0.85)" },
-  typeBadgeOverlayText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-
-  // Card body
+  typeBadgeOverlayText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
   cardContent: { padding: 10 },
   itemName: { fontSize: 13, fontWeight: "600", marginBottom: 5 },
-  locationRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 3 },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 3,
+  },
   locationText: { fontSize: 11, flex: 1 },
   dateRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   dateText: { fontSize: 11 },
-
-  // Invisible placeholder to keep last odd card at half width
   cardPlaceholder: {
     flex: 1,
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "transparent",
   },
-
-  // Empty
   centerContent: {
     flex: 1,
     justifyContent: "center",

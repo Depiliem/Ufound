@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -31,9 +32,24 @@ type Item = {
   status: string;
   map_x: number | null;
   map_y: number | null;
+  user_id: string | null;
+  users?: {
+    name: string;
+    email: string;
+  } | null;
 };
 
-// ── Skeleton component ────────────────────────────────────────────────────────
+const parseImages = (urlData: string | null): string[] => {
+  if (!urlData) return [];
+  try {
+    const parsed = JSON.parse(urlData);
+    if (Array.isArray(parsed)) return parsed;
+    return [urlData];
+  } catch {
+    return [urlData];
+  }
+};
+
 function SkeletonBox({
   width,
   height,
@@ -65,44 +81,88 @@ function SkeletonBox({
 function DetailSkeleton({ screenWidth }: { screenWidth: number }) {
   const { currentTheme } = useAppContext();
   return (
-    <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-      {/* Image skeleton */}
+    <View
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
+    >
       <SkeletonBox width={screenWidth} height={350} borderRadius={0} />
-
-      <View style={[styles.contentContainer, { backgroundColor: currentTheme.background }]}>
-        {/* Title skeleton */}
+      <View
+        style={[
+          styles.contentContainer,
+          { backgroundColor: currentTheme.background },
+        ]}
+      >
         <View style={{ marginBottom: 25 }}>
           <SkeletonBox width="70%" height={28} style={{ marginBottom: 10 }} />
           <SkeletonBox width="35%" height={16} />
         </View>
-
-        {/* Info card skeleton */}
         <View
           style={[
             styles.infoCard,
-            { borderColor: currentTheme.border, backgroundColor: currentTheme.cardBackground },
+            {
+              borderColor: currentTheme.border,
+              backgroundColor: currentTheme.cardBackground,
+            },
           ]}
         >
-          <View style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}>
-            <SkeletonBox width={44} height={44} borderRadius={12} style={{ marginRight: 15 }} />
+          <View
+            style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}
+          >
+            <SkeletonBox
+              width={44}
+              height={44}
+              borderRadius={12}
+              style={{ marginRight: 15 }}
+            />
             <View style={{ flex: 1 }}>
-              <SkeletonBox width="40%" height={12} style={{ marginBottom: 8 }} />
+              <SkeletonBox
+                width="40%"
+                height={12}
+                style={{ marginBottom: 8 }}
+              />
               <SkeletonBox width="65%" height={16} />
             </View>
           </View>
-          <View style={[styles.infoRow, styles.noBorderBottom]}>
-            <SkeletonBox width={44} height={44} borderRadius={12} style={{ marginRight: 15 }} />
+          <View
+            style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}
+          >
+            <SkeletonBox
+              width={44}
+              height={44}
+              borderRadius={12}
+              style={{ marginRight: 15 }}
+            />
             <View style={{ flex: 1 }}>
-              <SkeletonBox width="40%" height={12} style={{ marginBottom: 8 }} />
+              <SkeletonBox
+                width="40%"
+                height={12}
+                style={{ marginBottom: 8 }}
+              />
               <SkeletonBox width="75%" height={16} />
             </View>
           </View>
+          <View style={[styles.infoRow, styles.noBorderBottom]}>
+            <SkeletonBox
+              width={44}
+              height={44}
+              borderRadius={12}
+              style={{ marginRight: 15 }}
+            />
+            <View style={{ flex: 1 }}>
+              <SkeletonBox
+                width="40%"
+                height={12}
+                style={{ marginBottom: 8 }}
+              />
+              <SkeletonBox width="65%" height={16} />
+            </View>
+          </View>
         </View>
-
-        {/* Map button skeleton */}
-        <SkeletonBox width="100%" height={55} borderRadius={16} style={{ marginBottom: 25 }} />
-
-        {/* Description skeleton */}
+        <SkeletonBox
+          width="100%"
+          height={55}
+          borderRadius={16}
+          style={{ marginBottom: 25 }}
+        />
         <SkeletonBox width="40%" height={20} style={{ marginBottom: 12 }} />
         <SkeletonBox width="100%" height={14} style={{ marginBottom: 8 }} />
         <SkeletonBox width="85%" height={14} style={{ marginBottom: 8 }} />
@@ -118,6 +178,8 @@ export default function ItemDetail() {
   const [loading, setLoading] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const { currentTheme } = useAppContext();
 
   const screenWidth = Dimensions.get("window").width;
@@ -125,14 +187,38 @@ export default function ItemDetail() {
   const mapCanvasHeight = mapCanvasWidth * (900 / 1250);
 
   useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const raw = await AsyncStorage.getItem("current_user");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setIsAdmin(parsed.role === "admin");
+        }
+      } catch {}
+    };
+    loadUser();
+  }, []);
+
+  useEffect(() => {
     const fetchItemDetail = async () => {
       try {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("items")
-          .select("*")
+          .select("*, users(name, email)")
           .eq("id", id)
           .single();
-        if (error) throw error;
+
+        if (error) {
+          const fallback = await supabase
+            .from("items")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+          if (fallback.error) throw fallback.error;
+          data = fallback.data;
+        }
+
         setItem(data);
       } catch (error) {
       } finally {
@@ -165,12 +251,38 @@ export default function ItemDetail() {
     return data.publicUrl;
   };
 
-  const handleContactAction = () => {
+  const handleAdminDelete = () => {
+    const doDelete = async () => {
+      try {
+        const { error } = await supabase
+          .from("items")
+          .delete()
+          .eq("id", item!.id);
+        if (error) throw error;
+        router.back();
+      } catch {
+        if (Platform.OS === "web") {
+          window.alert("Gagal menghapus laporan.");
+        } else {
+          Alert.alert("Gagal", "Gagal menghapus laporan.");
+        }
+      }
+    };
+
     if (Platform.OS === "web") {
-      window.alert("Fitur kontak akan diaktifkan setelah sistem autentikasi selesai.");
+      if (window.confirm("Hapus laporan ini dari database?")) doDelete();
     } else {
-      Alert.alert("Informasi", "Fitur kontak akan diaktifkan setelah sistem autentikasi selesai.");
+      Alert.alert("Hapus Laporan", "Hapus laporan ini dari database?", [
+        { text: "Batal", style: "cancel" },
+        { text: "Ya, Hapus", style: "destructive", onPress: doDelete },
+      ]);
     }
+  };
+
+  const handleImageScroll = (event: any) => {
+    const scrollPosition = event.nativeEvent.contentOffset.x;
+    const index = Math.round(scrollPosition / screenWidth);
+    setActiveImageIndex(index);
   };
 
   if (loading) {
@@ -179,37 +291,97 @@ export default function ItemDetail() {
 
   if (!item) {
     return (
-      <View style={[styles.centerContainer, { backgroundColor: currentTheme.background }]}>
-        <Ionicons name="alert-circle-outline" size={60} color={currentTheme.textSecondary} />
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: currentTheme.background },
+        ]}
+      >
+        <Ionicons
+          name="alert-circle-outline"
+          size={60}
+          color={currentTheme.textSecondary}
+        />
         <Text style={[styles.errorText, { color: currentTheme.textMain }]}>
           Barang tidak ditemukan.
         </Text>
-        <TouchableOpacity style={styles.backBtnError} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtnError}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backBtnErrorText}>Kembali</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const images = parseImages(item.image_url);
+
   return (
-    <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+    <View
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
+    >
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="transparent"
+        translucent={true}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         <View style={styles.imageContainer}>
-          {item.image_url ? (
-            <TouchableOpacity activeOpacity={0.9} onPress={() => setIsFullScreen(true)}>
-              <Image source={{ uri: item.image_url }} style={[styles.mainImage, { width: screenWidth }]} />
-            </TouchableOpacity>
+          {images.length > 0 ? (
+            <View>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={handleImageScroll}
+                scrollEventThrottle={16}
+              >
+                {images.map((uri, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    activeOpacity={0.9}
+                    onPress={() => setIsFullScreen(true)}
+                  >
+                    <Image
+                      source={{ uri }}
+                      style={[styles.mainImage, { width: screenWidth }]}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {images.length > 1 && (
+                <View style={styles.paginationContainer}>
+                  {images.map((_, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.paginationDot,
+                        activeImageIndex === idx
+                          ? styles.paginationDotActive
+                          : styles.paginationDotInactive,
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
           ) : (
             <View style={[styles.noImagePlaceholder, { width: screenWidth }]}>
               <Ionicons name="image-outline" size={60} color="#999999" />
-              <Text style={styles.noImageText}>Tidak ada foto yang dilampirkan</Text>
+              <Text style={styles.noImageText}>
+                Tidak ada foto yang dilampirkan
+              </Text>
             </View>
           )}
 
           <View style={styles.headerFloatingNav}>
-            <TouchableOpacity style={styles.floatingBackBtn} onPress={() => router.back()}>
+            <TouchableOpacity
+              style={styles.floatingBackBtn}
+              onPress={() => router.back()}
+            >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View
@@ -225,34 +397,116 @@ export default function ItemDetail() {
           </View>
         </View>
 
-        <View style={[styles.contentContainer, { backgroundColor: currentTheme.background }]}>
+        <View
+          style={[
+            styles.contentContainer,
+            { backgroundColor: currentTheme.background },
+          ]}
+        >
           <View style={styles.titleSection}>
-            <Text style={[styles.itemTitle, { color: currentTheme.textMain }]}>{item.name}</Text>
-            <Text style={[styles.itemCategory, { color: Colors.primary }]}>{item.category}</Text>
+            <Text style={[styles.itemTitle, { color: currentTheme.textMain }]}>
+              {item.name}
+            </Text>
+            <Text style={[styles.itemCategory, { color: Colors.primary }]}>
+              {item.category}
+            </Text>
           </View>
 
           <View style={styles.infoCard}>
-            <View style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}>
-              <View style={[styles.iconBox, { backgroundColor: "rgba(88, 86, 214, 0.1)" }]}>
+            <View
+              style={[
+                styles.infoRow,
+                { borderBottomColor: currentTheme.border },
+              ]}
+            >
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: "rgba(88, 86, 214, 0.1)" },
+                ]}
+              >
+                <Ionicons name="person" size={22} color={Colors.primary} />
+              </View>
+              <View style={styles.infoTextContainer}>
+                <Text
+                  style={[
+                    styles.infoLabel,
+                    { color: currentTheme.textSecondary },
+                  ]}
+                >
+                  Dilaporkan Oleh
+                </Text>
+                <Text
+                  style={[styles.infoValue, { color: currentTheme.textMain }]}
+                >
+                  {item.users?.name || "Pengguna Anonim"}
+                </Text>
+                {item.users?.email && (
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: currentTheme.textSecondary,
+                      marginTop: 2,
+                    }}
+                  >
+                    {item.users.email}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.infoRow,
+                { borderBottomColor: currentTheme.border },
+              ]}
+            >
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: "rgba(88, 86, 214, 0.1)" },
+                ]}
+              >
                 <Ionicons name="location" size={22} color={Colors.primary} />
               </View>
               <View style={styles.infoTextContainer}>
-                <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Lokasi</Text>
-                <Text style={[styles.infoValue, { color: currentTheme.textMain }]}>
+                <Text
+                  style={[
+                    styles.infoLabel,
+                    { color: currentTheme.textSecondary },
+                  ]}
+                >
+                  Lokasi
+                </Text>
+                <Text
+                  style={[styles.infoValue, { color: currentTheme.textMain }]}
+                >
                   {item.building} - {item.floor}
                 </Text>
               </View>
             </View>
 
             <View style={[styles.infoRow, styles.noBorderBottom]}>
-              <View style={[styles.iconBox, { backgroundColor: "rgba(88, 86, 214, 0.1)" }]}>
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: "rgba(88, 86, 214, 0.1)" },
+                ]}
+              >
                 <Ionicons name="time" size={22} color={Colors.primary} />
               </View>
               <View style={styles.infoTextContainer}>
-                <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>
+                <Text
+                  style={[
+                    styles.infoLabel,
+                    { color: currentTheme.textSecondary },
+                  ]}
+                >
                   Waktu Pelaporan
                 </Text>
-                <Text style={[styles.infoValue, { color: currentTheme.textMain }]}>
+                <Text
+                  style={[styles.infoValue, { color: currentTheme.textMain }]}
+                >
                   {formatDate(item.created_at)}
                 </Text>
               </View>
@@ -263,20 +517,43 @@ export default function ItemDetail() {
             <TouchableOpacity
               style={[
                 styles.viewMapBtn,
-                { borderColor: currentTheme.border, backgroundColor: currentTheme.cardBackground },
+                {
+                  borderColor: currentTheme.border,
+                  backgroundColor: currentTheme.cardBackground,
+                },
               ]}
               onPress={() => setIsMapModalVisible(true)}
             >
-              <Ionicons name="map-outline" size={20} color={Colors.primary} style={{ marginRight: 10 }} />
-              <Text style={[styles.viewMapBtnText, { color: Colors.primary }]}>Cek Denah Lokasi</Text>
+              <Ionicons
+                name="map-outline"
+                size={20}
+                color={Colors.primary}
+                style={{ marginRight: 10 }}
+              />
+              <Text style={[styles.viewMapBtnText, { color: Colors.primary }]}>
+                Cek Denah Lokasi
+              </Text>
               <View style={{ flex: 1 }} />
-              <Ionicons name="chevron-forward" size={20} color={currentTheme.textSecondary} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={currentTheme.textSecondary}
+              />
             </TouchableOpacity>
           )}
 
           <View style={styles.descriptionSection}>
-            <Text style={[styles.sectionTitle, { color: currentTheme.textMain }]}>Deskripsi Tambahan</Text>
-            <Text style={[styles.descriptionText, { color: currentTheme.textSecondary }]}>
+            <Text
+              style={[styles.sectionTitle, { color: currentTheme.textMain }]}
+            >
+              Deskripsi Tambahan
+            </Text>
+            <Text
+              style={[
+                styles.descriptionText,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
               {item.description
                 ? item.description
                 : "Pelapor tidak memberikan deskripsi tambahan untuk barang ini."}
@@ -287,19 +564,30 @@ export default function ItemDetail() {
         </View>
       </ScrollView>
 
-      <View
-        style={[
-          styles.actionFooter,
-          { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border },
-        ]}
-      >
-        <TouchableOpacity style={styles.primaryActionBtn} onPress={handleContactAction}>
-          <Ionicons name="chatbubbles" size={20} color="#FFFFFF" style={styles.actionIcon} />
-          <Text style={styles.primaryActionText}>
-            {item.type === "lost" ? "Saya Menemukan Ini" : "Ini Barang Saya"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {isAdmin && (
+        <View
+          style={[
+            styles.actionFooter,
+            {
+              backgroundColor: currentTheme.cardBackground,
+              borderTopColor: currentTheme.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.deleteActionBtn}
+            onPress={handleAdminDelete}
+          >
+            <Ionicons
+              name="trash-outline"
+              size={20}
+              color="#FFFFFF"
+              style={styles.actionIcon}
+            />
+            <Text style={styles.deleteActionText}>Hapus Laporan</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <Modal
         visible={isFullScreen}
@@ -308,12 +596,32 @@ export default function ItemDetail() {
         onRequestClose={() => setIsFullScreen(false)}
       >
         <View style={styles.fullScreenContainer}>
-          <TouchableOpacity style={styles.closeFullScreenBtn} onPress={() => setIsFullScreen(false)}>
+          <TouchableOpacity
+            style={styles.closeFullScreenBtn}
+            onPress={() => setIsFullScreen(false)}
+          >
             <Ionicons name="close" size={36} color="#FFFFFF" />
           </TouchableOpacity>
-          {item?.image_url && (
-            <Image source={{ uri: item.image_url }} style={styles.fullScreenImage} />
-          )}
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: activeImageIndex * screenWidth, y: 0 }}
+          >
+            {images.map((uri, index) => (
+              <View
+                key={index}
+                style={{
+                  width: screenWidth,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Image source={{ uri }} style={styles.fullScreenImage} />
+              </View>
+            ))}
+          </ScrollView>
         </View>
       </Modal>
 
@@ -327,20 +635,42 @@ export default function ItemDetail() {
           <View
             style={[
               styles.mapModalCard,
-              { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+              {
+                backgroundColor: currentTheme.cardBackground,
+                borderColor: currentTheme.border,
+              },
             ]}
           >
-            <View style={[styles.mapModalHeaderCard, { borderBottomColor: currentTheme.border }]}>
-              <Text style={[styles.mapModalTitleCard, { color: currentTheme.textMain }]}>
+            <View
+              style={[
+                styles.mapModalHeaderCard,
+                { borderBottomColor: currentTheme.border },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.mapModalTitleCard,
+                  { color: currentTheme.textMain },
+                ]}
+              >
                 Denah Lokasi
               </Text>
               <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
-                <Ionicons name="close" size={24} color={currentTheme.textMain} />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={currentTheme.textMain}
+                />
               </TouchableOpacity>
             </View>
 
             <View style={styles.mapCanvasContainer}>
-              <View style={[styles.mapPressableCanvas, { width: mapCanvasWidth, height: mapCanvasHeight }]}>
+              <View
+                style={[
+                  styles.mapPressableCanvas,
+                  { width: mapCanvasWidth, height: mapCanvasHeight },
+                ]}
+              >
                 {item && (
                   <Image
                     source={{ uri: getMapImageUrl(item.building, item.floor) }}
@@ -373,14 +703,42 @@ export default function ItemDetail() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centerContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
   errorText: { fontSize: 16, marginTop: 15, fontWeight: "500" },
-  backBtnError: { marginTop: 20, paddingHorizontal: 25, paddingVertical: 12, backgroundColor: Colors.primary, borderRadius: 8 },
+  backBtnError: {
+    marginTop: 20,
+    paddingHorizontal: 25,
+    paddingVertical: 12,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+  },
   backBtnErrorText: { color: "#FFFFFF", fontWeight: "bold" },
   imageContainer: { position: "relative", backgroundColor: "#EAEAEA" },
   mainImage: { height: 350, resizeMode: "cover" },
-  noImagePlaceholder: { height: 350, justifyContent: "center", alignItems: "center", backgroundColor: "#2A2A2A" },
+  noImagePlaceholder: {
+    height: 350,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#2A2A2A",
+  },
   noImageText: { color: "#999999", marginTop: 10, fontSize: 14 },
+  paginationContainer: {
+    position: "absolute",
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  paginationDot: { height: 8, borderRadius: 4, marginHorizontal: 4 },
+  paginationDotActive: { width: 24, backgroundColor: Colors.primary },
+  paginationDotInactive: { width: 8, backgroundColor: "rgba(255,255,255,0.7)" },
   headerFloatingNav: {
     position: "absolute",
     top: Platform.OS === "ios" ? 50 : 40,
@@ -398,40 +756,146 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  floatingBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  badgeLost: { backgroundColor: "#FF3B30" },
-  badgeFound: { backgroundColor: "#34C759" },
-  floatingBadgeText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 12, letterSpacing: 1 },
-  contentContainer: { borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -24, padding: 25, minHeight: 500 },
+  floatingBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  badgeLost: { backgroundColor: "#EF4444" },
+  badgeFound: { backgroundColor: "#10B981" },
+  floatingBadgeText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  contentContainer: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -24,
+    padding: 25,
+    minHeight: 500,
+  },
   titleSection: { marginBottom: 25 },
   itemTitle: { fontSize: 26, fontWeight: "bold", marginBottom: 5 },
-  itemCategory: { fontSize: 16, fontWeight: "600", textTransform: "uppercase", letterSpacing: 1 },
-  infoCard: { borderRadius: 16, borderWidth: 1, borderColor: "rgba(0,0,0,0.05)", padding: 15, marginBottom: 15, backgroundColor: "rgba(0,0,0,0.02)" },
-  infoRow: { flexDirection: "row", alignItems: "center", paddingVertical: 15, borderBottomWidth: 1 },
+  itemCategory: {
+    fontSize: 16,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  infoCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.05)",
+    padding: 15,
+    marginBottom: 15,
+    backgroundColor: "rgba(0,0,0,0.02)",
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+  },
   noBorderBottom: { borderBottomWidth: 0 },
-  iconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: "center", alignItems: "center", marginRight: 15 },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
   infoTextContainer: { flex: 1 },
   infoLabel: { fontSize: 12, marginBottom: 4 },
   infoValue: { fontSize: 15, fontWeight: "600" },
-  viewMapBtn: { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 25 },
+  viewMapBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 25,
+  },
   viewMapBtnText: { fontSize: 15, fontWeight: "bold" },
   descriptionSection: { marginBottom: 20 },
   sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
   descriptionText: { fontSize: 15, lineHeight: 24 },
   bottomSpacing: { height: 80 },
-  actionFooter: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 20, paddingBottom: Platform.OS === "ios" ? 35 : 20, borderTopWidth: 1, elevation: 10 },
-  primaryActionBtn: { backgroundColor: Colors.primary, flexDirection: "row", height: 56, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  actionFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 35 : 20,
+    borderTopWidth: 1,
+    elevation: 10,
+  },
+  deleteActionBtn: {
+    backgroundColor: "#EF4444",
+    flexDirection: "row",
+    height: 56,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteActionText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    letterSpacing: 0.5,
+  },
   actionIcon: { marginRight: 10 },
-  primaryActionText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", letterSpacing: 0.5 },
-  fullScreenContainer: { flex: 1, backgroundColor: "#000000", justifyContent: "center", alignItems: "center" },
-  closeFullScreenBtn: { position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 20, zIndex: 999, padding: 12, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 30 },
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeFullScreenBtn: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 60 : 40,
+    right: 20,
+    zIndex: 999,
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 30,
+  },
   fullScreenImage: { width: "100%", height: "100%", resizeMode: "contain" },
-  mapModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", padding: 20 },
-  mapModalCard: { width: "100%", borderRadius: 16, borderWidth: 1, overflow: "hidden" },
-  mapModalHeaderCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1 },
+  mapModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  mapModalCard: {
+    width: "100%",
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  mapModalHeaderCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+  },
   mapModalTitleCard: { fontSize: 18, fontWeight: "bold" },
-  mapCanvasContainer: { padding: 20, alignItems: "center", justifyContent: "center" },
+  mapCanvasContainer: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   mapPressableCanvas: { position: "relative" },
-  mapImage: { width: "100%", height: "100%", resizeMode: "cover", borderRadius: 8 },
+  mapImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+    borderRadius: 8,
+  },
   pinContainer: { position: "absolute", zIndex: 10 },
 });

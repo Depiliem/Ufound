@@ -41,9 +41,22 @@ const CATEGORIES: CategoryOption[] = [
   { label: "Elektronik", value: "Elektronik", icon: "phone-portrait-outline" },
   { label: "Alat Makan", value: "Alat Makan", icon: "restaurant-outline" },
   { label: "Pakaian", value: "Pakaian", icon: "shirt-outline" },
+  { label: "Kunci", value: "Kunci", icon: "key-outline" },
   { label: "Accesories", value: "Accesories", icon: "glasses-outline" },
   { label: "Lainnya", value: "Lainnya", icon: "cube-outline" },
 ];
+
+// ── Fungsi Helper Parsing Thumbnail ──────────────────────────────────────────
+const getThumbnail = (urlData: string | null) => {
+  if (!urlData) return null;
+  try {
+    const parsed = JSON.parse(urlData);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+    return urlData;
+  } catch {
+    return urlData;
+  }
+};
 
 export default function History() {
   const [myItems, setMyItems] = useState<Item[]>([]);
@@ -55,21 +68,32 @@ export default function History() {
   const fetchMyReports = async () => {
     try {
       setLoading(true);
-      const raw = await AsyncStorage.getItem("current_user");
-      if (!raw) { setMyItems([]); return; }
-      const currentUser = JSON.parse(raw);
-      if (!currentUser?.id) { setMyItems([]); return; }
 
+      // 1. Ambil data akun yang sedang login dari memori lokal
+      const rawUser = await AsyncStorage.getItem("current_user");
+      if (!rawUser) {
+        setMyItems([]);
+        return;
+      }
+
+      const currentUser = JSON.parse(rawUser);
+      if (!currentUser || !currentUser.id) {
+        setMyItems([]);
+        return;
+      }
+
+      // 2. Tarik data dari database berdasarkan user_id, BUKAN dari memori HP
       const { data, error } = await supabase
         .from("items")
         .select("*")
-        .eq("user_id", currentUser.id)
+        .eq("user_id", currentUser.id) // Filter mutlak berdasarkan akun
         .eq("type", activeTab)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setMyItems(data || []);
     } catch (error) {
+      console.error("Error fetching history:", error);
     } finally {
       setLoading(false);
     }
@@ -93,9 +117,10 @@ export default function History() {
 
   const executeDelete = async (id: string) => {
     try {
+      // Hanya perlu hapus di Supabase, tidak perlu lagi mengurus array lokal
       const { error } = await supabase.from("items").delete().eq("id", id);
       if (error) throw error;
-      fetchMyReports();
+      fetchMyReports(); // Segarkan tampilan
     } catch (error) {
       if (Platform.OS === "web") {
         window.alert("Gagal memproses permintaan.");
@@ -108,34 +133,20 @@ export default function History() {
   const handleCancelReport = (id: string) => {
     if (Platform.OS === "web") {
       const isConfirmed = window.confirm(
-        "Laporan ini belum disetujui. Yakin ingin membatalkan dan menghapusnya dari database?",
+        "Yakin ingin menghapus laporan ini dari database?",
       );
       if (isConfirmed) executeDelete(id);
     } else {
       Alert.alert(
-        "Batalkan Laporan",
-        "Laporan ini belum disetujui. Yakin ingin membatalkan dan menghapusnya dari database?",
-        [
-          { text: "Kembali", style: "cancel" },
-          { text: "Ya, Batalkan", style: "destructive", onPress: () => executeDelete(id) },
-        ],
-      );
-    }
-  };
-
-  const handleMarkAsDone = (id: string) => {
-    if (Platform.OS === "web") {
-      const isConfirmed = window.confirm(
-        "Apakah barang Anda sudah ditemukan? Laporan ini akan ditandai selesai dan dihapus dari database.",
-      );
-      if (isConfirmed) executeDelete(id);
-    } else {
-      Alert.alert(
-        "Selesaikan Laporan",
-        "Apakah barang Anda sudah ditemukan? Laporan ini akan ditandai selesai dan dihapus dari database.",
+        "Hapus Laporan",
+        "Yakin ingin menghapus laporan ini dari database?",
         [
           { text: "Batal", style: "cancel" },
-          { text: "Ya, Selesai", style: "default", onPress: () => executeDelete(id) },
+          {
+            text: "Ya, Hapus",
+            style: "destructive",
+            onPress: () => executeDelete(id),
+          },
         ],
       );
     }
@@ -169,12 +180,16 @@ export default function History() {
     const amanStatus = item.status || "pending";
     const statusInfo = getStatusBadge(amanStatus);
     const typeInfo = getTypeBadge(item.type);
+    const thumbnailUri = getThumbnail(item.image_url);
 
     return (
       <View
         style={[
           styles.card,
-          { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
         ]}
       >
         <TouchableOpacity
@@ -183,11 +198,20 @@ export default function History() {
         >
           {/* Thumbnail */}
           <View style={styles.thumbWrapper}>
-            {item.image_url ? (
-              <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+            {thumbnailUri ? (
+              <Image source={{ uri: thumbnailUri }} style={styles.cardImage} />
             ) : (
-              <View style={[styles.noImage, { backgroundColor: currentTheme.background }]}>
-                <Ionicons name="image-outline" size={28} color={currentTheme.textSecondary} />
+              <View
+                style={[
+                  styles.noImage,
+                  { backgroundColor: currentTheme.background },
+                ]}
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={28}
+                  color={currentTheme.textSecondary}
+                />
               </View>
             )}
             {/* Category overlay on thumbnail */}
@@ -205,23 +229,35 @@ export default function History() {
               >
                 {item.name}
               </Text>
-              <View style={[styles.typeBadge, { backgroundColor: typeInfo.bgColor }]}>
+              <View
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: typeInfo.bgColor },
+                ]}
+              >
                 <Text style={styles.typeBadgeText}>{typeInfo.label}</Text>
               </View>
             </View>
 
-            <View style={[styles.statusBadge, { backgroundColor: statusInfo.bgColor }]}>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: statusInfo.bgColor },
+              ]}
+            >
               <Text style={styles.statusText}>{statusInfo.label}</Text>
             </View>
 
-            <Text style={[styles.dateText, { color: currentTheme.textSecondary }]}>
+            <Text
+              style={[styles.dateText, { color: currentTheme.textSecondary }]}
+            >
               {new Date(item.created_at).toLocaleDateString("id-ID")}
             </Text>
           </View>
         </TouchableOpacity>
 
-        {/* Lost: pending → bisa dibatalkan */}
-        {item.type === "lost" && amanStatus === "pending" && (
+        {/* Lost: semua status → user bisa hapus laporan miliknya sendiri */}
+        {item.type === "lost" && (
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => handleCancelReport(item.id)}
@@ -229,22 +265,14 @@ export default function History() {
             <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         )}
-
-        {/* Lost: approved → bisa ditandai selesai */}
-        {item.type === "lost" && amanStatus === "approved" && (
-          <TouchableOpacity
-            style={styles.doneBtn}
-            onPress={() => handleMarkAsDone(item.id)}
-          >
-            <Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
       </View>
     );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
+    <View
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
@@ -256,7 +284,12 @@ export default function History() {
       </View>
 
       {/* Tab Lost / Found */}
-      <View style={[styles.tabContainer, { borderBottomColor: currentTheme.border }]}>
+      <View
+        style={[
+          styles.tabContainer,
+          { borderBottomColor: currentTheme.border },
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.tabButton,
@@ -311,8 +344,12 @@ export default function History() {
                   style={[
                     styles.categoryChip,
                     {
-                      backgroundColor: isActive ? Colors.primary : currentTheme.cardBackground,
-                      borderColor: isActive ? Colors.primary : currentTheme.border,
+                      backgroundColor: isActive
+                        ? Colors.primary
+                        : currentTheme.cardBackground,
+                      borderColor: isActive
+                        ? Colors.primary
+                        : currentTheme.border,
                     },
                   ]}
                   onPress={() => setSelectedCategory(cat.value)}
@@ -325,7 +362,11 @@ export default function History() {
                   <Text
                     style={[
                       styles.categoryChipText,
-                      { color: isActive ? "#FFFFFF" : currentTheme.textSecondary },
+                      {
+                        color: isActive
+                          ? "#FFFFFF"
+                          : currentTheme.textSecondary,
+                      },
                     ]}
                   >
                     {cat.label}
@@ -338,7 +379,11 @@ export default function History() {
       )}
 
       {loading ? (
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 50 }} />
+        <ActivityIndicator
+          size="large"
+          color={Colors.primary}
+          style={{ marginTop: 50 }}
+        />
       ) : filteredItems.length === 0 ? (
         <View style={styles.center}>
           <Ionicons
@@ -349,17 +394,26 @@ export default function History() {
           <Text style={[styles.emptyTitle, { color: currentTheme.textMain }]}>
             {hasActiveFilter ? "Tidak Ada Hasil" : "Belum Ada Laporan"}
           </Text>
-          <Text style={[styles.emptySubtext, { color: currentTheme.textSecondary }]}>
+          <Text
+            style={[styles.emptySubtext, { color: currentTheme.textSecondary }]}
+          >
             {hasActiveFilter
               ? `Tidak ada laporan dengan kategori "${selectedCategory}"`
-              : `Kamu belum membuat laporan ${activeTab === "lost" ? '"Lost Item"' : '"Found Item"'}`}
+              : `Kamu belum membuat laporan ${
+                  activeTab === "lost" ? '"Lost Item"' : '"Found Item"'
+                }`}
           </Text>
           {hasActiveFilter ? (
             <TouchableOpacity
               style={styles.emptyActionBtn}
               onPress={() => setSelectedCategory("All")}
             >
-              <Ionicons name="refresh-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="refresh-outline"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.emptyActionBtnText}>Reset Filter</Text>
             </TouchableOpacity>
           ) : (
@@ -367,7 +421,12 @@ export default function History() {
               style={styles.emptyActionBtn}
               onPress={() => router.push("/report")}
             >
-              <Ionicons name="add-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="add-circle-outline"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.emptyActionBtnText}>Buat Laporan</Text>
             </TouchableOpacity>
           )}
@@ -375,7 +434,12 @@ export default function History() {
       ) : (
         <>
           <View style={styles.resultsBar}>
-            <Text style={[styles.resultsCount, { color: currentTheme.textSecondary }]}>
+            <Text
+              style={[
+                styles.resultsCount,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
               {filteredItems.length} laporan ditemukan
             </Text>
           </View>
@@ -405,7 +469,12 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: "bold" },
 
   tabContainer: { flexDirection: "row", borderBottomWidth: 1 },
-  tabButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderBottomWidth: 2 },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderBottomWidth: 2,
+  },
   tabText: { fontSize: 14, fontWeight: "600" },
 
   categorySection: { paddingVertical: 10 },
@@ -427,7 +496,6 @@ const styles = StyleSheet.create({
 
   listContainer: { paddingHorizontal: 16, paddingBottom: 100 },
 
-  // Card — 1 kolom horizontal (versi lama)
   card: {
     flexDirection: "row",
     borderRadius: 12,
@@ -438,7 +506,6 @@ const styles = StyleSheet.create({
   },
   cardWrapper: { flex: 1, flexDirection: "row", padding: 12 },
 
-  // Thumbnail kiri
   thumbWrapper: { position: "relative" },
   cardImage: { width: 70, height: 70, borderRadius: 8, resizeMode: "cover" },
   noImage: {
@@ -462,9 +529,13 @@ const styles = StyleSheet.create({
   },
   categoryOverlayText: { color: "#FFFFFF", fontSize: 9, fontWeight: "600" },
 
-  // Teks kanan
   cardText: { flex: 1, marginLeft: 12, justifyContent: "center" },
-  nameRow: { flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 8 },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+    gap: 8,
+  },
   itemName: { fontSize: 15, fontWeight: "bold", flex: 1 },
   typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   typeBadgeText: { fontSize: 10, fontWeight: "bold", color: "#FFFFFF" },
@@ -478,23 +549,25 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 10, fontWeight: "bold", color: "#FFFFFF" },
   dateText: { fontSize: 11 },
 
-  // Action buttons (ujung kanan card)
   deleteBtn: {
     backgroundColor: "#FF3B30",
     width: 52,
     justifyContent: "center",
     alignItems: "center",
   },
-  doneBtn: {
-    backgroundColor: "#34C759",
-    width: 52,
+
+  center: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 30,
   },
-
-  // Empty state
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 30 },
-  emptyTitle: { fontSize: 17, fontWeight: "bold", marginTop: 14, marginBottom: 6 },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "bold",
+    marginTop: 14,
+    marginBottom: 6,
+  },
   emptySubtext: { fontSize: 13, textAlign: "center", marginBottom: 20 },
   emptyActionBtn: {
     flexDirection: "row",
