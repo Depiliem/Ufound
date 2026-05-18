@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  Vibration,
 } from "react-native";
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
@@ -71,7 +72,7 @@ export default function Report() {
       await Notifications.setNotificationChannelAsync("laporan-ufound", {
         name: "Notifikasi Laporan",
         importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 300, 200, 300],
+        vibrationPattern: [0, 500, 250, 500],
         enableVibrate: true,
         lightColor: "#5856D6",
         sound: "default",
@@ -184,6 +185,11 @@ export default function Report() {
       const percentX = Math.max(0, Math.min(1, rawX / mapSize.width));
       const percentY = Math.max(0, Math.min(1, rawY / mapSize.height));
       setMapCoordinate({ x: percentX, y: percentY });
+
+      // ── GETAR SAAT PILIH LOKASI ──
+      // Angka 100 artinya HP bakal bergetar halus selama 100 milidetik
+      // (Di web otomatis diabaikan, jadi gak bakal bikin web crash)
+      Vibration.vibrate(200);
     }
   };
 
