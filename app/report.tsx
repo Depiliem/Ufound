@@ -1,10 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode } from "base64-arraybuffer";
-import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Dimensions,
@@ -24,6 +23,10 @@ import {
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system/legacy"; // Import Legacy untuk Expo baru
 
 const STEPS = [
   { key: "type", label: "Tipe", icon: "flag-outline" },
@@ -40,10 +43,6 @@ function getProgress(
   floor: string,
   imageUri: string | null,
 ): number {
-  // Step 0 (Tipe): always done since default is "lost"
-  // Step 1 (Detail): name + category filled
-  // Step 2 (Lokasi): building + floor filled
-  // Step 3 (Foto): image uploaded (optional but counts)
   if (imageUri) return 4;
   if (building && floor) return 3;
   if (itemName && category) return 2;
@@ -69,12 +68,65 @@ export default function Report() {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [isMinimized, setIsMinimized] = useState(false);
 
+  const [expoPushToken, setExpoPushToken] = useState("");
   const { currentTheme } = useAppContext();
 
   const currentStep = getProgress(reportType, itemName, category, building, floor, imageUri);
 
   const categories = ["Elektronik", "Alat Makan", "Pakaian", "Kunci", "Accesories", "Lainnya"];
   const buildings = ["Gedung A", "Gedung B", "Gedung C", "Gedung D"];
+
+  // [OPTIMASI] Pemicu token otomatis agar mendeteksi app.json secara dinamis & aman dari nilai null
+const registerForPushNotificationsAsync = async () => {
+  let token;
+ 
+  if (Platform.OS === "android") {
+    // Channel "default" — dipakai oleh notifikasi approve/reject dari admin
+    await Notifications.setNotificationChannelAsync("laporan-ufound", {
+      name: "Notifikasi Laporan",
+      importance: Notifications.AndroidImportance.MAX,
+      // Pola getar: delay 0ms → getar 300ms → jeda 200ms → getar 300ms
+      vibrationPattern: [0, 300, 200, 300],
+      enableVibrate: true,
+      lightColor: "#5856D6",
+      sound: "default",
+    });
+  }
+ 
+  if (Device.isDevice) {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+ 
+    if (existingStatus !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+ 
+    if (finalStatus !== "granted") {
+      console.log("Izin push notification ditolak user!");
+      return;
+    }
+ 
+    try {
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId ??
+        "Y0a0ad3e3-cf3a-4101-95af-02ffa62b0d72";
+ 
+      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      setExpoPushToken(token);
+    } catch (error) {
+      console.log("Gagal mengambil token di simulator/Expo Go:", error);
+    }
+  }
+ 
+  return token;
+};
+
+
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+  }, []);
 
   const getDynamicFloors = (selectedBuilding: string) => {
     let maxFloors = 0;
@@ -176,8 +228,9 @@ export default function Report() {
           const response = await fetch(imageUri);
           fileData = await response.blob();
         } else {
-          const file = new File(imageUri);
-          const base64 = await file.base64();
+          const base64 = await FileSystem.readAsStringAsync(imageUri, {
+            encoding: "base64",
+          });
           fileData = decode(base64);
         }
         const { error } = await supabase.storage
@@ -201,6 +254,7 @@ export default function Report() {
           map_y: mapCoordinate?.y || null,
           status: "pending",
           user_id: currentUser?.id || null,
+          push_token: expoPushToken, // Token HP pelapor resmi otomatis tersimpan ke baris data baru
         },
       ]);
 
@@ -268,7 +322,6 @@ export default function Report() {
 
   return (
     <View style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
-      {/* Header with back button */}
       <View style={[styles.pageHeader, { borderBottomColor: currentTheme.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.pageBackBtn}>
           <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
@@ -279,7 +332,6 @@ export default function Report() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Step Progress Indicator */}
       <View style={[styles.progressContainer, { backgroundColor: currentTheme.cardBackground, borderBottomColor: currentTheme.border }]}>
         {STEPS.map((step, index) => {
           const stepNum = index + 1;
@@ -357,7 +409,7 @@ export default function Report() {
                 style={[
                   styles.toggleText,
                   { color: currentTheme.textSecondary },
-                  reportType === "lost" && styles.toggleTextActive,
+                  reportType === "lost" && styles.toggleBtnActive && styles.toggleTextActive,
                 ]}
               >
                 I Lost an Item
@@ -371,7 +423,7 @@ export default function Report() {
                 style={[
                   styles.toggleText,
                   { color: currentTheme.textSecondary },
-                  reportType === "found" && styles.toggleTextActive,
+                  reportType === "found" && styles.toggleBtnActive && styles.toggleTextActive,
                 ]}
               >
                 I Found an Item
@@ -683,8 +735,6 @@ export default function Report() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-
-  // Page header
   pageHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -696,8 +746,6 @@ const styles = StyleSheet.create({
   },
   pageBackBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
   pageHeaderTitle: { fontSize: 17, fontWeight: "700" },
-
-  // Step progress
   progressContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -720,7 +768,6 @@ const styles = StyleSheet.create({
   stepActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   stepLabel: { fontSize: 10, fontWeight: "500" },
   stepConnector: { flex: 1, height: 2, marginHorizontal: 4, marginBottom: 16 },
-
   keyboardAvoid: { flex: 1 },
   container: { flex: 1 },
   content: { padding: 20, paddingBottom: 60 },

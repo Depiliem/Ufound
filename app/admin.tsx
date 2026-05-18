@@ -33,6 +33,7 @@ type Item = {
   description: string;
   image_url: string | null;
   status: string | null;
+  push_token: string | null;
 };
 
 type CategoryOption = {
@@ -52,7 +53,6 @@ const CATEGORIES: CategoryOption[] = [
 ];
 
 export default function AdminPanel() {
-  // ── Main view state (approved items, sama seperti Home) ──────────────────
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,7 +61,6 @@ export default function AdminPanel() {
   const [selectedBuilding, setSelectedBuilding] = useState("Semua");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  // ── Moderation modal state ───────────────────────────────────────────────
   const [isModerationVisible, setIsModerationVisible] = useState(false);
   const [pendingItems, setPendingItems] = useState<Item[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
@@ -70,38 +69,31 @@ export default function AdminPanel() {
 
   const { currentTheme, isDarkMode } = useAppContext();
 
-  const filterBuildings = [
-    "Semua",
-    "Gedung A",
-    "Gedung B",
-    "Gedung C",
-    "Gedung D",
-  ];
+  const filterBuildings = ["Semua", "Gedung A", "Gedung B", "Gedung C", "Gedung D"];
 
-  // ── Role guard ────────────────────────────────────────────────────────────
+  const checkRole = async () => {
+    try {
+      const raw = await AsyncStorage.getItem("current_user");
+      if (!raw) {
+        router.replace("/(tabs)");
+        return;
+      }
+      const user = JSON.parse(raw);
+      if (user.role !== "admin") {
+        router.replace("/(tabs)");
+        return;
+      }
+    } catch {
+      router.replace("/(tabs)");
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
-      const checkRole = async () => {
-        try {
-          const raw = await AsyncStorage.getItem("current_user");
-          if (!raw) {
-            router.replace("/(tabs)");
-            return;
-          }
-          const user = JSON.parse(raw);
-          if (user.role !== "admin") {
-            router.replace("/(tabs)");
-            return;
-          }
-        } catch {
-          router.replace("/(tabs)");
-        }
-      };
       checkRole();
     }, []),
   );
 
-  // ── Fetch approved items (main view) ──────────────────────────────────────
   const fetchApprovedItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -113,14 +105,14 @@ export default function AdminPanel() {
 
       if (error) throw error;
       setItems(data || []);
-    } catch {
+    } catch (err) {
+      console.error("Error approved items:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [activeTab]);
 
-  // ── Fetch pending count (badge) ───────────────────────────────────────────
   const fetchPendingCount = useCallback(async () => {
     try {
       const { count } = await supabase
@@ -136,16 +128,18 @@ export default function AdminPanel() {
       setLoading(true);
       fetchApprovedItems();
       fetchPendingCount();
-    }, [activeTab]),
+    }, [activeTab, fetchApprovedItems, fetchPendingCount]),
   );
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchApprovedItems();
     fetchPendingCount();
+    if (isModerationVisible) {
+      fetchPendingItems();
+    }
   };
 
-  // ── Fetch pending items for modal ─────────────────────────────────────────
   const fetchPendingItems = useCallback(async () => {
     try {
       setPendingLoading(true);
@@ -158,7 +152,8 @@ export default function AdminPanel() {
 
       if (error) throw error;
       setPendingItems(data || []);
-    } catch {
+    } catch (err) {
+      console.error("Error pending items:", err);
     } finally {
       setPendingLoading(false);
     }
@@ -169,20 +164,69 @@ export default function AdminPanel() {
     fetchPendingItems();
   };
 
-  // Re-fetch when pendingTab changes inside modal
-  useFocusEffect(
-    useCallback(() => {}, []), // placeholder, handled via useCallback dep below
-  );
+  const sendPushNotification = async (
+  expoPushToken: string,
+  statusLaporan: string,
+  itemName: string,
+  itemId: string,
+) => {
+  const isApproved = statusLaporan === "approved";
+ 
+  const title = isApproved
+    ? "Laporan Disetujui! "
+    : "Laporan Ditolak ";
+ 
+  const body = isApproved
+    ? `Laporan mengenai ${itemName} sudah diverifikasi dan diposting ya!`
+    : `Cek lagi laporan ${itemName} anda, ada yang kurang sesuai !.`;
+ 
+  const message = {
+    to: expoPushToken,
+    sound: "default",
+    title,
+    body,
+    // data.url digunakan oleh _layout.tsx untuk navigasi ke detail saat notif ditekan
+    data: { url: `/detail/${itemId}` },
+    channelId: "laporan-ufound",  // channel yang sudah dibuat di report.tsx (ada vibrate-nya)
+    android: {
+      vibrate: [0, 300, 200, 300],
+    },
+    priority: "high",
+  };
+ 
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(message),
+    });
+ 
+    const resData = await response.json();
+    console.log("Respon Server Expo Push:", resData);
+  } catch (error) {
+    console.error("Gagal mengirim push notification:", error);
+  }
+};
 
-  // ── Moderation actions ────────────────────────────────────────────────────
+
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
+      const itemDitemukan = pendingItems.find(i => i.id === id);
+
       const { error } = await supabase
         .from("items")
         .update({ status: newStatus })
         .eq("id", id);
       if (error) throw error;
-      // refresh both
+
+      if (itemDitemukan && itemDitemukan.push_token) {
+        await sendPushNotification(itemDitemukan.push_token, newStatus, itemDitemukan.name, id);
+      }
+
       fetchPendingItems();
       fetchPendingCount();
       fetchApprovedItems();
@@ -217,7 +261,9 @@ export default function AdminPanel() {
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return "-";
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "-";
     return date.toLocaleDateString("id-ID", {
       day: "numeric",
       month: "short",
@@ -232,20 +278,23 @@ export default function AdminPanel() {
     setSearchQuery("");
   };
 
-  // ── Filtered main list ────────────────────────────────────────────────────
   const filteredItems = items.filter((item) => {
+    if (!item) return false;
+    const name = item.name || "";
+    const description = item.description || "";
+    const building = item.building || "";
+    const category = item.category || "";
+
     const matchSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.description &&
-        item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchBuilding =
-      selectedBuilding === "Semua" || item.building === selectedBuilding;
+      selectedBuilding === "Semua" || building === selectedBuilding;
     const matchCategory =
-      selectedCategory === "All" || item.category === selectedCategory;
+      selectedCategory === "All" || category === selectedCategory;
     return matchSearch && matchBuilding && matchCategory;
   });
 
-  // ── Render: main grid card (sama seperti Home) ────────────────────────────
   const renderMainCard = ({ item }: { item: Item }) => (
     <TouchableOpacity
       style={[
@@ -324,7 +373,6 @@ export default function AdminPanel() {
     </TouchableOpacity>
   );
 
-  // ── Render: pending card inside moderation modal ──────────────────────────
   const renderPendingCard = ({ item }: { item: Item }) => (
     <View
       style={[
@@ -402,7 +450,6 @@ export default function AdminPanel() {
     </View>
   );
 
-  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <StatusBar
@@ -412,11 +459,10 @@ export default function AdminPanel() {
       <View
         style={[styles.container, { backgroundColor: currentTheme.background }]}
       >
-        {/* Header — sama seperti Home tapi ada icon moderasi */}
+        {/* Header */}
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
           <View style={styles.headerIcons}>
-            {/* History */}
             <TouchableOpacity
               onPress={() => router.push("/history")}
               style={styles.iconButton}
@@ -424,7 +470,6 @@ export default function AdminPanel() {
               <Ionicons name="time" size={22} color="#FFFFFF" />
             </TouchableOpacity>
 
-            {/* Moderation icon + badge */}
             <TouchableOpacity
               onPress={openModeration}
               style={styles.iconButton}
@@ -672,7 +717,7 @@ export default function AdminPanel() {
         )}
       </View>
 
-      {/* ── Moderation Modal ─────────────────────────────────────────────── */}
+      {/* Moderation Modal */}
       <Modal
         visible={isModerationVisible}
         animationType="slide"
@@ -684,7 +729,6 @@ export default function AdminPanel() {
             { backgroundColor: currentTheme.background },
           ]}
         >
-          {/* Modal header */}
           <View
             style={[
               styles.modalHeader,
@@ -701,7 +745,6 @@ export default function AdminPanel() {
             <View style={{ width: 26 }} />
           </View>
 
-          {/* Pending tab Lost/Found */}
           <View
             style={[
               styles.tabContainer,
@@ -714,10 +757,7 @@ export default function AdminPanel() {
                 { borderBottomColor: currentTheme.border },
                 pendingTab === "lost" && { borderBottomColor: Colors.primary },
               ]}
-              onPress={() => {
-                setPendingTab("lost");
-                // trigger fetch via useEffect below
-              }}
+              onPress={() => setPendingTab("lost")}
             >
               <Text
                 style={[
@@ -735,9 +775,7 @@ export default function AdminPanel() {
                 { borderBottomColor: currentTheme.border },
                 pendingTab === "found" && { borderBottomColor: Colors.primary },
               ]}
-              onPress={() => {
-                setPendingTab("found");
-              }}
+              onPress={() => setPendingTab("found")}
             >
               <Text
                 style={[
@@ -751,7 +789,6 @@ export default function AdminPanel() {
             </TouchableOpacity>
           </View>
 
-          {/* Pending list */}
           <PendingList
             pendingTab={pendingTab}
             currentTheme={currentTheme}
@@ -763,7 +800,7 @@ export default function AdminPanel() {
         </View>
       </Modal>
 
-      {/* ── Manual Tab Bar ───────────────────────────────────────────────── */}
+      {/* Manual Tab Bar */}
       <View
         style={[
           styles.tabBar,
@@ -817,7 +854,6 @@ export default function AdminPanel() {
   );
 }
 
-// ── Sub-component to handle pendingTab change effect ─────────────────────────
 function PendingList({
   pendingTab,
   currentTheme,
@@ -835,7 +871,7 @@ function PendingList({
 }) {
   React.useEffect(() => {
     fetchPendingItems();
-  }, [pendingTab]);
+  }, [pendingTab, fetchPendingItems]);
 
   if (pendingLoading) {
     return (
@@ -874,11 +910,8 @@ function PendingList({
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  // Header
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -895,8 +928,6 @@ const styles = StyleSheet.create({
   },
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
-
-  // Badge
   badge: {
     position: "absolute",
     top: -6,
@@ -910,8 +941,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "bold" },
-
-  // Tabs
   tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
   tabButton: {
     flex: 1,
@@ -920,8 +949,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
   },
   tabText: { fontSize: 14, fontWeight: "600" },
-
-  // Search
   searchSection: { paddingHorizontal: 20, paddingTop: 12, marginBottom: 10 },
   searchBar: {
     flexDirection: "row",
@@ -933,8 +960,6 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14 },
   searchIcon: { marginLeft: 10 },
-
-  // Category
   categorySection: {
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -960,8 +985,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   categoryChipText: { fontSize: 12, fontWeight: "500" },
-
-  // Building filter
   filterSection: { marginTop: 10, marginBottom: 4 },
   filterScroll: { paddingHorizontal: 20 },
   filterChip: {
@@ -972,16 +995,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipText: { fontSize: 12, fontWeight: "500" },
-
-  // Results
   resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
   resultsCount: { fontSize: 12 },
-
-  // Grid list
   listContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
   columnWrapper: { gap: 10, marginBottom: 10 },
-
-  // Main grid card
   card: { flex: 1, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
   imageWrapper: { position: "relative" },
   cardImage: { width: "100%", height: 120, resizeMode: "cover" },
@@ -1029,8 +1046,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "transparent",
   },
-
-  // Empty / center
   centerContent: {
     flex: 1,
     justifyContent: "center",
@@ -1044,8 +1059,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
-
-  // Moderation modal
   modalContainer: { flex: 1 },
   modalHeader: {
     flexDirection: "row",
@@ -1057,8 +1070,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   modalTitle: { fontSize: 17, fontWeight: "700", color: "#FFFFFF" },
-
-  // Pending card (inside modal, horizontal layout)
   pendingListContainer: { padding: 16, paddingBottom: 60 },
   pendingCard: {
     borderRadius: 12,
@@ -1094,8 +1105,6 @@ const styles = StyleSheet.create({
   rejectBtn: { backgroundColor: "#EF4444" },
   approveBtn: { backgroundColor: "#10B981" },
   pendingActionText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 14 },
-
-  // Manual tab bar
   tabBar: {
     flexDirection: "row",
     height: 70,
