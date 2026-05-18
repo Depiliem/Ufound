@@ -18,7 +18,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 
-// ── Pixel-art "U" logo ────────────────────────────────────────────────────────
 function PixelLogo() {
   const BLUE = "#2B7FE0";
   const DARK = "#1B4FA0";
@@ -80,7 +79,6 @@ const logoStyles = StyleSheet.create({
   },
 });
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -132,7 +130,7 @@ export default function Login() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#161C2C" />
+      <StatusBar barStyle="light-content" backgroundColor={BG} />
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -143,16 +141,13 @@ export default function Login() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Logo area */}
           <View style={styles.logoSection}>
             <PixelLogo />
           </View>
 
-          {/* Form area */}
           <View style={styles.formSection}>
             <Text style={styles.welcomeText}>Welcome</Text>
 
-            {/* Email */}
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
@@ -165,7 +160,6 @@ export default function Login() {
               />
             </View>
 
-            {/* Password */}
             <View style={styles.inputWrapPass}>
               <TextInput
                 style={[styles.input, { paddingRight: 52 }]}
@@ -188,7 +182,6 @@ export default function Login() {
               </TouchableOpacity>
             </View>
 
-            {/* Forgot Password Link */}
             <TouchableOpacity
               onPress={() => router.push("/forgot-password")}
               style={styles.forgotBtn}
@@ -197,7 +190,6 @@ export default function Login() {
               <Text style={styles.forgotText}>Forgot Password?</Text>
             </TouchableOpacity>
 
-            {/* Login button */}
             <TouchableOpacity
               style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
               onPress={handleLogin}
@@ -205,13 +197,12 @@ export default function Login() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator size="small" color="#8A9AB8" />
+                <ActivityIndicator size="small" color="#161C2C" />
               ) : (
                 <Text style={styles.loginBtnText}>Login</Text>
               )}
             </TouchableOpacity>
 
-            {/* Register Link Footer */}
             <View style={styles.registerRow}>
               <Text style={styles.noAccountText}>Tidak punya akun? </Text>
               <TouchableOpacity
@@ -228,44 +219,30 @@ export default function Login() {
   );
 }
 
-const BG = "#161C2C";
-const CARD = "#1E2538";
-const BORDER = "#2A3350";
+// ── WARNA BACKGROUND BARU (Bisa kamu ganti di sini) ──
+const BG = "#121622";
+const CARD = "#1A1F32";
+const BORDER = "#252D4A";
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-  kav: {
-    flex: 1,
-  },
+  safe: { flex: 1, backgroundColor: BG },
+  kav: { flex: 1 },
   scroll: {
     flexGrow: 1,
     justifyContent: "center",
     paddingHorizontal: 28,
     paddingVertical: 40,
   },
-  logoSection: {
-    alignItems: "center",
-    marginBottom: 60,
-  },
-  formSection: {
-    width: "100%",
-  },
+  logoSection: { alignItems: "center", marginBottom: 60 },
+  formSection: { width: "100%" },
   welcomeText: {
     fontSize: 28,
     fontWeight: "800",
     color: "#FFFFFF",
     marginBottom: 24,
   },
-  inputWrap: {
-    position: "relative",
-    marginBottom: 25,
-  },
-  inputWrapPass: {
-    position: "relative",
-  },
+  inputWrap: { position: "relative", marginBottom: 25 },
+  inputWrapPass: { position: "relative" },
   input: {
     backgroundColor: CARD,
     borderWidth: 1,
@@ -289,37 +266,16 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     alignItems: "center",
   },
-  loginBtnText: {
-    color: "#8A9AB8",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  loginBtnDisabled: {
-    opacity: 0.6,
-  },
-  forgotBtn: {
-    alignItems: "flex-end",
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  forgotText: {
-    color: "#5A6A8A",
-    fontSize: 12,
-    fontWeight: "500",
-  },
+  loginBtnText: { color: "#121622", fontSize: 16, fontWeight: "600" },
+  loginBtnDisabled: { opacity: 0.6 },
+  forgotBtn: { alignItems: "flex-end", marginTop: 8, marginBottom: 24 },
+  forgotText: { color: "#5A6A8A", fontSize: 12, fontWeight: "500" },
   registerRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 30,
   },
-  noAccountText: {
-    color: "#5A6A8A",
-    fontSize: 14,
-  },
-  registerLink: {
-    color: "#2B7FE0",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  noAccountText: { color: "#5A6A8A", fontSize: 14 },
+  registerLink: { color: "#2B7FE0", fontSize: 14, fontWeight: "600" },
 });
