@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AntDesign from '@expo/vector-icons/AntDesign';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -9,8 +10,9 @@ import {
   Switch,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
+import Header from "../../components/Header";
 import { Colors } from "../../constants/Colors";
 import { useAppContext } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
@@ -30,8 +32,6 @@ type Stats = {
   pending: number;
 };
 
-const PROFILE_IMAGE = { uri: "https://randomuser.me/api/portraits/men/9.jpg" };
-
 export default function ProfileScreen() {
   const { isDarkMode, toggleTheme, currentTheme } = useAppContext();
   const [isNotif, setIsNotif] = React.useState(true);
@@ -48,7 +48,7 @@ export default function ProfileScreen() {
           setUser(parsed);
           fetchStats(parsed.id);
         }
-      } catch {}
+      } catch { }
     };
     loadUser();
   }, []);
@@ -87,23 +87,18 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg }]}>
-      <View style={styles.topHeader}>
-        <Text style={styles.topHeaderTitle}>Profile</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="stats-chart" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => router.push("/history")}>
-            <Ionicons name="time-outline" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <Header title="Profile" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* ── Profile Card ── */}
         <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <View style={[styles.avatarWrap, { borderColor: theme.primary }]}>
-            <Image source={PROFILE_IMAGE} style={styles.avatar} />
+            <View style={styles.defaultAvatar}>
+              <Image
+                source={require("../../assets/images/user.png")}
+                style={styles.defaultAvatarImage}
+              />
+            </View>
           </View>
           <Text style={[styles.profileName, { color: theme.text }]}>{user?.name ?? "–"}</Text>
           <Text style={[styles.profileNim, { color: theme.subtext }]}>{user?.nim ?? "–"}</Text>
@@ -168,7 +163,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              <Text style={styles.settingEmoji}>{isDarkMode ? "🌙" : "🌞"}</Text>
+              <Text style={styles.settingEmoji}>{isDarkMode ? <AntDesign name="moon" size={24} color="yellow" /> : <AntDesign name="sun" size={24} color="black" />}</Text>
               <View>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>
                   {isDarkMode ? "Dark Mode" : "Light Mode"}
@@ -185,45 +180,22 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setIsNotif((prev) => !prev)}
-            style={[styles.settingRow, { borderBottomColor: theme.border }]}
+            onPress={async () => {
+              await AsyncStorage.removeItem("current_user");
+              router.replace("/");
+            }}
+            style={styles.settingRow}
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              <Text style={styles.settingEmoji}>{isNotif ? "🔔" : "🔕"}</Text>
+              <Text style={styles.settingEmoji}>🚪</Text>
               <View>
-                <Text style={[styles.settingLabel, { color: theme.text }]}>Notifikasi</Text>
-                <Text style={[styles.settingDesc, { color: theme.subtext }]}>
-                  {isNotif ? "Notifikasi aktif" : "Notifikasi dimatikan"}
-                </Text>
+                <Text style={[styles.settingLabel, { color: theme.text }]}>Log Out</Text>
+                <Text style={[styles.settingDesc, { color: theme.subtext }]}>Keluar Akun</Text>
               </View>
             </View>
-            <Switch
-              value={isNotif}
-              onValueChange={setIsNotif}
-              trackColor={{ false: theme.accent, true: theme.primary }}
-              thumbColor={"#fff"}
-            />
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          onPress={async () => {
-            await AsyncStorage.removeItem("current_user");
-            router.replace("/login");
-          }}
-          style={[styles.settingRow, { borderBottomColor: "transparent" }]}
-          activeOpacity={0.7}
-        >
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingEmoji}>🚪</Text>
-            <View>
-              <Text style={[styles.settingLabel, { color: theme.text }]}>Log Out</Text>
-              <Text style={[styles.settingDesc, { color: theme.subtext }]}>Keluar Akun</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
         <View style={{ height: 80 }} />
       </ScrollView>
     </View>
@@ -232,6 +204,20 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  defaultAvatar: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "#B0B0B0",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  defaultAvatarImage: {
+    width: 90,
+    height: 90,
+    resizeMode: "cover"
+  },
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -252,7 +238,7 @@ const styles = StyleSheet.create({
     padding: 24,
     marginBottom: 24,
   },
-  avatarWrap: { borderWidth: 3, borderRadius: 60, padding: 3, marginBottom: 12 },
+  avatarWrap: { borderRadius: 70, padding: 3, marginBottom: 12 },
   avatar: { width: 90, height: 90, borderRadius: 45 },
   profileName: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
   profileNim: { fontSize: 14, marginBottom: 12 },
