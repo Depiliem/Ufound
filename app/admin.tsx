@@ -33,7 +33,6 @@ type Item = {
   description: string;
   image_url: string | null;
   status: string | null;
-  push_token: string | null;
 };
 
 type CategoryOption = {
@@ -52,7 +51,20 @@ const CATEGORIES: CategoryOption[] = [
   { label: "Lainnya", value: "Lainnya", icon: "cube-outline" },
 ];
 
+// ── Fungsi Helper Parsing Thumbnail ──────────────────────────────────────────
+const getThumbnail = (urlData: string | null) => {
+  if (!urlData) return null;
+  try {
+    const parsed = JSON.parse(urlData);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+    return urlData;
+  } catch {
+    return urlData;
+  }
+};
+
 export default function AdminPanel() {
+  // ── Main view state (approved items, sama seperti Home) ──────────────────
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,6 +73,7 @@ export default function AdminPanel() {
   const [selectedBuilding, setSelectedBuilding] = useState("Semua");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
+  // ── Moderation modal state ───────────────────────────────────────────────
   const [isModerationVisible, setIsModerationVisible] = useState(false);
   const [pendingItems, setPendingItems] = useState<Item[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
@@ -69,31 +82,38 @@ export default function AdminPanel() {
 
   const { currentTheme, isDarkMode } = useAppContext();
 
-  const filterBuildings = ["Semua", "Gedung A", "Gedung B", "Gedung C", "Gedung D"];
+  const filterBuildings = [
+    "Semua",
+    "Gedung A",
+    "Gedung B",
+    "Gedung C",
+    "Gedung D",
+  ];
 
-  const checkRole = async () => {
-    try {
-      const raw = await AsyncStorage.getItem("current_user");
-      if (!raw) {
-        router.replace("/(tabs)");
-        return;
-      }
-      const user = JSON.parse(raw);
-      if (user.role !== "admin") {
-        router.replace("/(tabs)");
-        return;
-      }
-    } catch {
-      router.replace("/(tabs)");
-    }
-  };
-
+  // ── Role guard ────────────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
+      const checkRole = async () => {
+        try {
+          const raw = await AsyncStorage.getItem("current_user");
+          if (!raw) {
+            router.replace("/(tabs)");
+            return;
+          }
+          const user = JSON.parse(raw);
+          if (user.role !== "admin") {
+            router.replace("/(tabs)");
+            return;
+          }
+        } catch {
+          router.replace("/(tabs)");
+        }
+      };
       checkRole();
     }, []),
   );
 
+  // ── Fetch approved items (main view) ──────────────────────────────────────
   const fetchApprovedItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -105,14 +125,14 @@ export default function AdminPanel() {
 
       if (error) throw error;
       setItems(data || []);
-    } catch (err) {
-      console.error("Error approved items:", err);
+    } catch {
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [activeTab]);
 
+  // ── Fetch pending count (badge) ───────────────────────────────────────────
   const fetchPendingCount = useCallback(async () => {
     try {
       const { count } = await supabase
@@ -128,18 +148,16 @@ export default function AdminPanel() {
       setLoading(true);
       fetchApprovedItems();
       fetchPendingCount();
-    }, [activeTab, fetchApprovedItems, fetchPendingCount]),
+    }, [activeTab]),
   );
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchApprovedItems();
     fetchPendingCount();
-    if (isModerationVisible) {
-      fetchPendingItems();
-    }
   };
 
+  // ── Fetch pending items for modal ─────────────────────────────────────────
   const fetchPendingItems = useCallback(async () => {
     try {
       setPendingLoading(true);
@@ -152,8 +170,7 @@ export default function AdminPanel() {
 
       if (error) throw error;
       setPendingItems(data || []);
-    } catch (err) {
-      console.error("Error pending items:", err);
+    } catch {
     } finally {
       setPendingLoading(false);
     }
@@ -164,69 +181,16 @@ export default function AdminPanel() {
     fetchPendingItems();
   };
 
-  const sendPushNotification = async (
-  expoPushToken: string,
-  statusLaporan: string,
-  itemName: string,
-  itemId: string,
-) => {
-  const isApproved = statusLaporan === "approved";
- 
-  const title = isApproved
-    ? "Laporan Disetujui! "
-    : "Laporan Ditolak ";
- 
-  const body = isApproved
-    ? `Laporan mengenai ${itemName} sudah diverifikasi dan diposting ya!`
-    : `Cek lagi laporan ${itemName} anda, ada yang kurang sesuai !.`;
- 
-  const message = {
-    to: expoPushToken,
-    sound: "default",
-    title,
-    body,
-    // data.url digunakan oleh _layout.tsx untuk navigasi ke detail saat notif ditekan
-    data: { url: `/detail/${itemId}` },
-    channelId: "laporan-ufound",  // channel yang sudah dibuat di report.tsx (ada vibrate-nya)
-    android: {
-      vibrate: [0, 300, 200, 300],
-    },
-    priority: "high",
-  };
- 
-  try {
-    const response = await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Accept-encoding": "gzip, deflate",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(message),
-    });
- 
-    const resData = await response.json();
-    console.log("Respon Server Expo Push:", resData);
-  } catch (error) {
-    console.error("Gagal mengirim push notification:", error);
-  }
-};
+  useFocusEffect(useCallback(() => {}, []));
 
-
+  // ── Moderation actions ────────────────────────────────────────────────────
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      const itemDitemukan = pendingItems.find(i => i.id === id);
-
       const { error } = await supabase
         .from("items")
         .update({ status: newStatus })
         .eq("id", id);
       if (error) throw error;
-
-      if (itemDitemukan && itemDitemukan.push_token) {
-        await sendPushNotification(itemDitemukan.push_token, newStatus, itemDitemukan.name, id);
-      }
-
       fetchPendingItems();
       fetchPendingCount();
       fetchApprovedItems();
@@ -261,9 +225,7 @@ export default function AdminPanel() {
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return "-";
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "-";
     return date.toLocaleDateString("id-ID", {
       day: "numeric",
       month: "short",
@@ -278,178 +240,200 @@ export default function AdminPanel() {
     setSearchQuery("");
   };
 
+  // ── Filtered main list ────────────────────────────────────────────────────
   const filteredItems = items.filter((item) => {
-    if (!item) return false;
-    const name = item.name || "";
-    const description = item.description || "";
-    const building = item.building || "";
-    const category = item.category || "";
-
     const matchSearch =
-      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      description.toLowerCase().includes(searchQuery.toLowerCase());
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.description &&
+        item.description.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchBuilding =
-      selectedBuilding === "Semua" || building === selectedBuilding;
+      selectedBuilding === "Semua" || item.building === selectedBuilding;
     const matchCategory =
-      selectedCategory === "All" || category === selectedCategory;
+      selectedCategory === "All" || item.category === selectedCategory;
     return matchSearch && matchBuilding && matchCategory;
   });
 
-  const renderMainCard = ({ item }: { item: Item }) => (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        {
-          backgroundColor: currentTheme.cardBackground,
-          borderColor: currentTheme.border,
-        },
-      ]}
-      onPress={() => router.push(`/detail/${item.id}`)}
-    >
-      <View style={styles.imageWrapper}>
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-        ) : (
-          <View
-            style={[
-              styles.noImageContainer,
-              { backgroundColor: currentTheme.background },
-            ]}
-          >
-            <Ionicons
-              name="image-outline"
-              size={40}
-              color={currentTheme.textSecondary}
-            />
-          </View>
-        )}
-        <View style={styles.categoryOverlay}>
-          <Text style={styles.categoryOverlayText}>{item.category}</Text>
-        </View>
-        <View
-          style={[
-            styles.typeBadgeOverlay,
-            item.type === "lost" ? styles.typeBadgeLost : styles.typeBadgeFound,
-          ]}
-        >
-          <Text style={styles.typeBadgeOverlayText}>
-            {item.type === "lost" ? "Hilang" : "Ditemukan"}
-          </Text>
-        </View>
-      </View>
+  // ── Render: main grid card (sama seperti Home) ────────────────────────────
+  const renderMainCard = ({ item }: { item: Item }) => {
+    const thumbnailUri = getThumbnail(item.image_url);
 
-      <View style={styles.cardContent}>
-        <Text
-          style={[styles.itemName, { color: currentTheme.textMain }]}
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-        <View style={styles.locationRow}>
-          <Ionicons
-            name="location-outline"
-            size={14}
-            color={currentTheme.textSecondary}
-          />
-          <Text
-            style={[styles.locationText, { color: currentTheme.textSecondary }]}
-          >
-            {item.building} · {item.floor}
-          </Text>
-        </View>
-        <View style={styles.dateRow}>
-          <Ionicons
-            name="time-outline"
-            size={13}
-            color={currentTheme.textSecondary}
-          />
-          <Text
-            style={[styles.dateText, { color: currentTheme.textSecondary }]}
-          >
-            {formatDate(item.created_at)}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderPendingCard = ({ item }: { item: Item }) => (
-    <View
-      style={[
-        styles.pendingCard,
-        {
-          backgroundColor: currentTheme.cardBackground,
-          borderColor: currentTheme.border,
-        },
-      ]}
-    >
+    return (
       <TouchableOpacity
-        style={styles.pendingCardTop}
-        onPress={() => {
-          setIsModerationVisible(false);
-          router.push(`/detail/${item.id}`);
-        }}
+        style={[
+          styles.card,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}
+        onPress={() => router.push(`/detail/${item.id}`)}
       >
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.pendingThumb} />
-        ) : (
+        <View style={styles.imageWrapper}>
+          {thumbnailUri ? (
+            <Image source={{ uri: thumbnailUri }} style={styles.cardImage} />
+          ) : (
+            <View
+              style={[
+                styles.noImageContainer,
+                { backgroundColor: currentTheme.background },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={40}
+                color={currentTheme.textSecondary}
+              />
+            </View>
+          )}
+          <View style={styles.categoryOverlay}>
+            <Text style={styles.categoryOverlayText}>{item.category}</Text>
+          </View>
           <View
             style={[
-              styles.pendingThumbEmpty,
-              { backgroundColor: currentTheme.background },
+              styles.typeBadgeOverlay,
+              item.type === "lost"
+                ? styles.typeBadgeLost
+                : styles.typeBadgeFound,
             ]}
           >
-            <Ionicons
-              name="image-outline"
-              size={24}
-              color={currentTheme.textSecondary}
-            />
+            <Text style={styles.typeBadgeOverlayText}>
+              {item.type === "lost" ? "Hilang" : "Ditemukan"}
+            </Text>
           </View>
-        )}
-        <View style={styles.pendingCardText}>
+        </View>
+
+        <View style={styles.cardContent}>
           <Text
-            style={[styles.pendingItemName, { color: currentTheme.textMain }]}
+            style={[styles.itemName, { color: currentTheme.textMain }]}
             numberOfLines={1}
           >
             {item.name}
           </Text>
-          <Text
-            style={[styles.pendingMeta, { color: currentTheme.textSecondary }]}
-          >
-            {item.category} · {item.building} · {item.floor}
-          </Text>
-          <Text
-            style={[styles.pendingDate, { color: currentTheme.textSecondary }]}
-          >
-            {formatDate(item.created_at)}
-          </Text>
+          <View style={styles.locationRow}>
+            <Ionicons
+              name="location-outline"
+              size={14}
+              color={currentTheme.textSecondary}
+            />
+            <Text
+              style={[
+                styles.locationText,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {item.building} · {item.floor}
+            </Text>
+          </View>
+          <View style={styles.dateRow}>
+            <Ionicons
+              name="time-outline"
+              size={13}
+              color={currentTheme.textSecondary}
+            />
+            <Text
+              style={[styles.dateText, { color: currentTheme.textSecondary }]}
+            >
+              {formatDate(item.created_at)}
+            </Text>
+          </View>
         </View>
       </TouchableOpacity>
+    );
+  };
 
+  // ── Render: pending card inside moderation modal ──────────────────────────
+  const renderPendingCard = ({ item }: { item: Item }) => {
+    const thumbnailUri = getThumbnail(item.image_url);
+
+    return (
       <View
         style={[
-          styles.pendingActionRow,
-          { borderTopColor: currentTheme.border },
+          styles.pendingCard,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
         ]}
       >
         <TouchableOpacity
-          style={[styles.pendingActionBtn, styles.rejectBtn]}
-          onPress={() => confirmAction(item.id, "rejected")}
+          style={styles.pendingCardTop}
+          onPress={() => {
+            setIsModerationVisible(false);
+            router.push(`/detail/${item.id}`);
+          }}
         >
-          <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
-          <Text style={styles.pendingActionText}>Tolak</Text>
+          {thumbnailUri ? (
+            <Image source={{ uri: thumbnailUri }} style={styles.pendingThumb} />
+          ) : (
+            <View
+              style={[
+                styles.pendingThumbEmpty,
+                { backgroundColor: currentTheme.background },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={24}
+                color={currentTheme.textSecondary}
+              />
+            </View>
+          )}
+          <View style={styles.pendingCardText}>
+            <Text
+              style={[styles.pendingItemName, { color: currentTheme.textMain }]}
+              numberOfLines={1}
+            >
+              {item.name}
+            </Text>
+            <Text
+              style={[
+                styles.pendingMeta,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {item.category} · {item.building} · {item.floor}
+            </Text>
+            <Text
+              style={[
+                styles.pendingDate,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {formatDate(item.created_at)}
+            </Text>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.pendingActionBtn, styles.approveBtn]}
-          onPress={() => confirmAction(item.id, "approved")}
-        >
-          <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
-          <Text style={styles.pendingActionText}>Setujui</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
+        <View
+          style={[
+            styles.pendingActionRow,
+            { borderTopColor: currentTheme.border },
+          ]}
+        >
+          <TouchableOpacity
+            style={[styles.pendingActionBtn, styles.rejectBtn]}
+            onPress={() => confirmAction(item.id, "rejected")}
+          >
+            <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.pendingActionText}>Tolak</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.pendingActionBtn, styles.approveBtn]}
+            onPress={() => confirmAction(item.id, "approved")}
+          >
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.pendingActionText}>Setujui</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <StatusBar
@@ -459,7 +443,6 @@ export default function AdminPanel() {
       <View
         style={[styles.container, { backgroundColor: currentTheme.background }]}
       >
-        {/* Header */}
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
           <View style={styles.headerIcons}>
@@ -492,7 +475,6 @@ export default function AdminPanel() {
           </View>
         </View>
 
-        {/* Lost / Found Tabs */}
         <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[
@@ -532,7 +514,6 @@ export default function AdminPanel() {
           </TouchableOpacity>
         </View>
 
-        {/* Search Bar */}
         <View style={styles.searchSection}>
           <View
             style={[
@@ -559,7 +540,6 @@ export default function AdminPanel() {
           </View>
         </View>
 
-        {/* Category Filter */}
         <View style={styles.categorySection}>
           <Text
             style={[
@@ -615,7 +595,6 @@ export default function AdminPanel() {
           </ScrollView>
         </View>
 
-        {/* Building Filter */}
         <View style={styles.filterSection}>
           <ScrollView
             horizontal
@@ -655,7 +634,6 @@ export default function AdminPanel() {
           </ScrollView>
         </View>
 
-        {/* Results count */}
         {!loading && (
           <View style={styles.resultsBar}>
             <Text
@@ -669,7 +647,6 @@ export default function AdminPanel() {
           </View>
         )}
 
-        {/* Main grid list */}
         {loading ? (
           <View style={styles.centerContent}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -717,7 +694,6 @@ export default function AdminPanel() {
         )}
       </View>
 
-      {/* Moderation Modal */}
       <Modal
         visible={isModerationVisible}
         animationType="slide"
@@ -757,7 +733,9 @@ export default function AdminPanel() {
                 { borderBottomColor: currentTheme.border },
                 pendingTab === "lost" && { borderBottomColor: Colors.primary },
               ]}
-              onPress={() => setPendingTab("lost")}
+              onPress={() => {
+                setPendingTab("lost");
+              }}
             >
               <Text
                 style={[
@@ -775,7 +753,9 @@ export default function AdminPanel() {
                 { borderBottomColor: currentTheme.border },
                 pendingTab === "found" && { borderBottomColor: Colors.primary },
               ]}
-              onPress={() => setPendingTab("found")}
+              onPress={() => {
+                setPendingTab("found");
+              }}
             >
               <Text
                 style={[
@@ -800,7 +780,6 @@ export default function AdminPanel() {
         </View>
       </Modal>
 
-      {/* Manual Tab Bar */}
       <View
         style={[
           styles.tabBar,
@@ -854,6 +833,7 @@ export default function AdminPanel() {
   );
 }
 
+// ── Sub-component to handle pendingTab change effect ─────────────────────────
 function PendingList({
   pendingTab,
   currentTheme,
@@ -871,7 +851,7 @@ function PendingList({
 }) {
   React.useEffect(() => {
     fetchPendingItems();
-  }, [pendingTab, fetchPendingItems]);
+  }, [pendingTab]);
 
   if (pendingLoading) {
     return (
@@ -910,8 +890,11 @@ function PendingList({
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  // Header
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -928,6 +911,8 @@ const styles = StyleSheet.create({
   },
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
+
+  // Badge
   badge: {
     position: "absolute",
     top: -6,
@@ -941,6 +926,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "bold" },
+
+  // Tabs
   tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
   tabButton: {
     flex: 1,
@@ -949,6 +936,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
   },
   tabText: { fontSize: 14, fontWeight: "600" },
+
+  // Search
   searchSection: { paddingHorizontal: 20, paddingTop: 12, marginBottom: 10 },
   searchBar: {
     flexDirection: "row",
@@ -960,6 +949,8 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14 },
   searchIcon: { marginLeft: 10 },
+
+  // Category
   categorySection: {
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -985,6 +976,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   categoryChipText: { fontSize: 12, fontWeight: "500" },
+
+  // Building filter
   filterSection: { marginTop: 10, marginBottom: 4 },
   filterScroll: { paddingHorizontal: 20 },
   filterChip: {
@@ -995,10 +988,16 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipText: { fontSize: 12, fontWeight: "500" },
+
+  // Results
   resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
   resultsCount: { fontSize: 12 },
+
+  // Grid list
   listContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
   columnWrapper: { gap: 10, marginBottom: 10 },
+
+  // Main grid card
   card: { flex: 1, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
   imageWrapper: { position: "relative" },
   cardImage: { width: "100%", height: 120, resizeMode: "cover" },
@@ -1046,6 +1045,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "transparent",
   },
+
+  // Empty / center
   centerContent: {
     flex: 1,
     justifyContent: "center",
@@ -1059,6 +1060,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
+
+  // Moderation modal
   modalContainer: { flex: 1 },
   modalHeader: {
     flexDirection: "row",
@@ -1070,6 +1073,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   modalTitle: { fontSize: 17, fontWeight: "700", color: "#FFFFFF" },
+
+  // Pending card (inside modal, horizontal layout)
   pendingListContainer: { padding: 16, paddingBottom: 60 },
   pendingCard: {
     borderRadius: 12,
@@ -1105,6 +1110,8 @@ const styles = StyleSheet.create({
   rejectBtn: { backgroundColor: "#EF4444" },
   approveBtn: { backgroundColor: "#10B981" },
   pendingActionText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 14 },
+
+  // Manual tab bar
   tabBar: {
     flexDirection: "row",
     height: 70,
