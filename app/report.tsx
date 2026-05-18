@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode } from "base64-arraybuffer";
+import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useState, useEffect } from "react";
@@ -23,37 +24,17 @@ import {
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
+
+// ── NOTIFIKASI IMPORTS ──
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
-import * as FileSystem from "expo-file-system/legacy"; // Import Legacy untuk Expo baru
-
-const STEPS = [
-  { key: "type", label: "Tipe", icon: "flag-outline" },
-  { key: "detail", label: "Detail", icon: "create-outline" },
-  { key: "lokasi", label: "Lokasi", icon: "location-outline" },
-  { key: "foto", label: "Foto", icon: "camera-outline" },
-];
-
-function getProgress(
-  reportType: string,
-  itemName: string,
-  category: string,
-  building: string,
-  floor: string,
-  imageUri: string | null,
-): number {
-  if (imageUri) return 4;
-  if (building && floor) return 3;
-  if (itemName && category) return 2;
-  return 1;
-}
 
 export default function Report() {
   const [reportType, setReportType] = useState<"lost" | "found">("lost");
   const [itemName, setItemName] = useState("");
   const [description, setDescription] = useState("");
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [building, setBuilding] = useState("");
@@ -68,61 +49,63 @@ export default function Report() {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [isMinimized, setIsMinimized] = useState(false);
 
-  const [expoPushToken, setExpoPushToken] = useState("");
   const { currentTheme } = useAppContext();
 
-  const currentStep = getProgress(reportType, itemName, category, building, floor, imageUri);
+  // ── NOTIFIKASI STATE ──
+  const [expoPushToken, setExpoPushToken] = useState("");
 
-  const categories = ["Elektronik", "Alat Makan", "Pakaian", "Kunci", "Accesories", "Lainnya"];
+  const categories = [
+    "Elektronik",
+    "Alat Makan",
+    "Pakaian",
+    "Accesories",
+    "Lainnya",
+  ];
   const buildings = ["Gedung A", "Gedung B", "Gedung C", "Gedung D"];
 
-  // [OPTIMASI] Pemicu token otomatis agar mendeteksi app.json secara dinamis & aman dari nilai null
-const registerForPushNotificationsAsync = async () => {
-  let token;
- 
-  if (Platform.OS === "android") {
-    // Channel "default" — dipakai oleh notifikasi approve/reject dari admin
-    await Notifications.setNotificationChannelAsync("laporan-ufound", {
-      name: "Notifikasi Laporan",
-      importance: Notifications.AndroidImportance.MAX,
-      // Pola getar: delay 0ms → getar 300ms → jeda 200ms → getar 300ms
-      vibrationPattern: [0, 300, 200, 300],
-      enableVibrate: true,
-      lightColor: "#5856D6",
-      sound: "default",
-    });
-  }
- 
-  if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
- 
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+  // ── NOTIFIKASI LOGIC: Ambil Token Perangkat ──
+  const registerForPushNotificationsAsync = async () => {
+    let token;
+    
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("laporan-ufound", {
+        name: "Notifikasi Laporan",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 300, 200, 300],
+        enableVibrate: true,
+        lightColor: "#5856D6",
+        sound: "default",
+      });
     }
- 
-    if (finalStatus !== "granted") {
-      console.log("Izin push notification ditolak user!");
-      return;
-    }
- 
-    try {
-      const projectId =
-        Constants.expoConfig?.extra?.eas?.projectId ??
-        Constants.easConfig?.projectId ??
-        "Y0a0ad3e3-cf3a-4101-95af-02ffa62b0d72";
- 
-      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      setExpoPushToken(token);
-    } catch (error) {
-      console.log("Gagal mengambil token di simulator/Expo Go:", error);
-    }
-  }
- 
-  return token;
-};
 
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== "granted") {
+        console.log("Izin push notification ditolak user!");
+        return;
+      }
+
+      try {
+        const projectId =
+          Constants.expoConfig?.extra?.eas?.projectId ??
+          Constants.easConfig?.projectId ??
+          "Y0a0ad3e3-cf3a-4101-95af-02ffa62b0d72";
+
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        setExpoPushToken(token);
+      } catch (error) {
+        console.log("Gagal mengambil token (Masa Testing / Tanpa Login Expo):", error);
+      }
+    }
+    return token;
+  };
 
   useEffect(() => {
     registerForPushNotificationsAsync();
@@ -150,36 +133,53 @@ const registerForPushNotificationsAsync = async () => {
     setIsImageOptionsModalVisible(false);
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsMultipleSelection: true,
+      selectionLimit: 3 - images.length,
       quality: 0.8,
     });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
+    if (!result.canceled) {
+      const newUris = result.assets.map((a) => a.uri);
+      setImages((prev) => [...prev, ...newUris].slice(0, 3));
+    }
   };
 
   const takePhoto = async () => {
     setIsImageOptionsModalVisible(false);
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
     if (permissionResult.granted === false) {
-      if (Platform.OS === "web") window.alert("Izin kamera ditolak.");
-      else Alert.alert("Izin Ditolak", "Akses kamera dibutuhkan untuk mengambil foto.");
+      if (Platform.OS === "web") {
+        window.alert("Izin kamera ditolak.");
+      } else {
+        Alert.alert("Izin Ditolak", "Akses kamera dibutuhkan untuk mengambil foto.");
+      }
       return;
     }
-    let result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
+
+    let result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+
+    if (!result.canceled) {
+      setImages((prev) => [...prev, result.assets[0].uri].slice(0, 3));
+    }
   };
 
   const handleImageUploadPress = () => {
-    setIsImageOptionsModalVisible(true);
+    if (images.length >= 3) return;
+    if (reportType === "found") {
+      setIsImageOptionsModalVisible(true);
+    } else {
+      pickGallery();
+    }
+  };
+
+  const removeImage = (indexToRemove: number) => {
+    setImages((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
   const handleMapPress = (event: any) => {
     const rawX = event.nativeEvent.offsetX ?? event.nativeEvent.locationX;
     const rawY = event.nativeEvent.offsetY ?? event.nativeEvent.locationY;
+
     if (mapSize.width > 0 && mapSize.height > 0) {
       const percentX = Math.max(0, Math.min(1, rawX / mapSize.width));
       const percentY = Math.max(0, Math.min(1, rawY / mapSize.height));
@@ -207,58 +207,93 @@ const registerForPushNotificationsAsync = async () => {
 
   const handleSubmit = async () => {
     if (!itemName || !category || !building || !floor) {
-      if (Platform.OS === "web") window.alert("Validasi: Mohon lengkapi semua field.");
-      else Alert.alert("Validasi", "Mohon lengkapi semua field.");
+      if (Platform.OS === "web") {
+        window.alert("Validasi: Mohon lengkapi semua field wajib.");
+      } else {
+        Alert.alert("Validasi", "Mohon lengkapi semua field wajib.");
+      }
       return;
     }
-    const raw = await AsyncStorage.getItem("current_user");
-    const currentUser = raw ? JSON.parse(raw) : null;
+
     setIsLoading(true);
 
     try {
-      const newItemId = generateUUID();
-      let finalImageUrl = null;
-
-      if (imageUri) {
-        const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpeg";
-        const fileName = `public/${Date.now()}.${fileExt}`;
-        const mimeType = fileExt === "png" ? "image/png" : "image/jpeg";
-        let fileData;
-        if (Platform.OS === "web") {
-          const response = await fetch(imageUri);
-          fileData = await response.blob();
-        } else {
-          const base64 = await FileSystem.readAsStringAsync(imageUri, {
-            encoding: "base64",
-          });
-          fileData = decode(base64);
+      const rawUser = await AsyncStorage.getItem("current_user");
+      let currentUserId = null;
+      if (rawUser) {
+        try {
+          const parsedUser = JSON.parse(rawUser);
+          currentUserId = parsedUser.id;
+        } catch (e) {
+          console.error("Gagal parse data user", e);
         }
-        const { error } = await supabase.storage
-          .from("item-images")
-          .upload(fileName, fileData, { contentType: mimeType });
-        if (error) throw new Error(`Gagal unggah foto: ${error.message}`);
-        finalImageUrl = supabase.storage.from("item-images").getPublicUrl(fileName).data.publicUrl;
       }
 
+      if (!currentUserId) {
+        throw new Error("Sesi pengguna tidak valid. Silakan relogin.");
+      }
+
+      const newItemId = generateUUID();
+      let finalImageUrlData = null;
+
+      if (images.length > 0) {
+        const uploadPromises = images.map(async (uri) => {
+          const fileExt = uri.split(".").pop()?.toLowerCase() || "jpeg";
+          const fileName = `public/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const mimeType = fileExt === "png" ? "image/png" : "image/jpeg";
+          let fileData;
+          if (Platform.OS === "web") {
+            const response = await fetch(uri);
+            fileData = await response.blob();
+          } else {
+            const file = new File(uri);
+            const base64 = await file.base64();
+            fileData = decode(base64);
+          }
+          const { error } = await supabase.storage
+            .from("item-images")
+            .upload(fileName, fileData, { contentType: mimeType });
+          if (error) throw new Error(`Gagal unggah foto: ${error.message}`);
+          return supabase.storage.from("item-images").getPublicUrl(fileName).data.publicUrl;
+        });
+
+        const uploadedUrls = await Promise.all(uploadPromises);
+        finalImageUrlData = JSON.stringify(uploadedUrls);
+      }
+
+      // ── SIMPAN DATA + TOKEN KE SUPABASE ──
       const { error: insertError } = await supabase.from("items").insert([
         {
           id: newItemId,
+          user_id: currentUserId,
           type: reportType,
           name: itemName,
-          category,
-          building,
-          floor,
-          description,
-          image_url: finalImageUrl,
+          category: category,
+          building: building,
+          floor: floor,
+          description: description,
+          image_url: finalImageUrlData,
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
           status: "pending",
-          user_id: currentUser?.id || null,
-          push_token: expoPushToken, // Token HP pelapor resmi otomatis tersimpan ke baris data baru
+          push_token: expoPushToken || null, 
         },
       ]);
 
-      if (insertError) throw new Error(`Gagal simpan data: ${insertError.message}`);
+      if (insertError)
+        throw new Error(`Gagal simpan data: ${insertError.message}`);
+
+      if (reportType === "lost") {
+        const storedIds = await AsyncStorage.getItem("my_reports");
+        let idsArray: string[] = [];
+        try {
+          idsArray = storedIds ? JSON.parse(storedIds) : [];
+        } catch (e) {
+          idsArray = [];
+        }
+        idsArray.push(newItemId);
+        await AsyncStorage.setItem("my_reports", JSON.stringify(idsArray));
+      }
 
       if (Platform.OS === "web") {
         window.alert("Sukses: Laporan berhasil disimpan.");
@@ -269,8 +304,11 @@ const registerForPushNotificationsAsync = async () => {
         ]);
       }
     } catch (error: any) {
-      if (Platform.OS === "web") window.alert(`Gagal: ${error.message}`);
-      else Alert.alert("Gagal", error.message);
+      if (Platform.OS === "web") {
+        window.alert(`Gagal: ${error.message}`);
+      } else {
+        Alert.alert("Gagal", error.message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -322,68 +360,6 @@ const registerForPushNotificationsAsync = async () => {
 
   return (
     <View style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
-      <View style={[styles.pageHeader, { borderBottomColor: currentTheme.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.pageBackBtn}>
-          <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
-        </TouchableOpacity>
-        <Text style={[styles.pageHeaderTitle, { color: currentTheme.textMain }]}>
-          Buat Laporan
-        </Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={[styles.progressContainer, { backgroundColor: currentTheme.cardBackground, borderBottomColor: currentTheme.border }]}>
-        {STEPS.map((step, index) => {
-          const stepNum = index + 1;
-          const isDone = currentStep > stepNum;
-          const isActive = currentStep === stepNum;
-          const isUpcoming = currentStep < stepNum;
-
-          return (
-            <React.Fragment key={step.key}>
-              <View style={styles.stepItem}>
-                <View
-                  style={[
-                    styles.stepCircle,
-                    isDone && styles.stepDone,
-                    isActive && styles.stepActive,
-                    isUpcoming && { borderColor: currentTheme.border, backgroundColor: "transparent" },
-                  ]}
-                >
-                  {isDone ? (
-                    <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                  ) : (
-                    <Ionicons
-                      name={step.icon as any}
-                      size={14}
-                      color={isActive ? "#FFFFFF" : currentTheme.textSecondary}
-                    />
-                  )}
-                </View>
-                <Text
-                  style={[
-                    styles.stepLabel,
-                    { color: isUpcoming ? currentTheme.textSecondary : currentTheme.textMain },
-                    isActive && { color: Colors.primary, fontWeight: "700" },
-                  ]}
-                >
-                  {step.label}
-                </Text>
-              </View>
-              {index < STEPS.length - 1 && (
-                <View
-                  style={[
-                    styles.stepConnector,
-                    { backgroundColor: currentTheme.border },
-                    currentStep > stepNum && { backgroundColor: Colors.primary },
-                  ]}
-                />
-              )}
-            </React.Fragment>
-          );
-        })}
-      </View>
-
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -395,37 +371,20 @@ const registerForPushNotificationsAsync = async () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View
-            style={[
-              styles.toggleContainer,
-              { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-            ]}
-          >
+          <View style={[styles.toggleContainer, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
             <TouchableOpacity
               style={[styles.toggleBtn, reportType === "lost" && styles.toggleBtnActive]}
-              onPress={() => { setReportType("lost"); setImageUri(null); }}
+              onPress={() => { setReportType("lost"); setImages([]); }}
             >
-              <Text
-                style={[
-                  styles.toggleText,
-                  { color: currentTheme.textSecondary },
-                  reportType === "lost" && styles.toggleBtnActive && styles.toggleTextActive,
-                ]}
-              >
+              <Text style={[styles.toggleText, { color: currentTheme.textSecondary }, reportType === "lost" && styles.toggleTextActive]}>
                 I Lost an Item
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.toggleBtn, reportType === "found" && styles.toggleBtnActive]}
-              onPress={() => { setReportType("found"); setImageUri(null); }}
+              onPress={() => { setReportType("found"); setImages([]); }}
             >
-              <Text
-                style={[
-                  styles.toggleText,
-                  { color: currentTheme.textSecondary },
-                  reportType === "found" && styles.toggleBtnActive && styles.toggleTextActive,
-                ]}
-              >
+              <Text style={[styles.toggleText, { color: currentTheme.textSecondary }, reportType === "found" && styles.toggleTextActive]}>
                 I Found an Item
               </Text>
             </TouchableOpacity>
@@ -434,10 +393,7 @@ const registerForPushNotificationsAsync = async () => {
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: currentTheme.textMain }]}>Nama Barang</Text>
             <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.textMain },
-              ]}
+              style={[styles.input, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.textMain }]}
               placeholder="Contoh: Kunci Motor, Dompet Hitam"
               placeholderTextColor={currentTheme.textSecondary}
               value={itemName}
@@ -448,18 +404,10 @@ const registerForPushNotificationsAsync = async () => {
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: currentTheme.textMain }]}>Kategori</Text>
             <TouchableOpacity
-              style={[
-                styles.dropdownSelector,
-                { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-              ]}
+              style={[styles.dropdownSelector, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
               onPress={() => setCategoryModalVisible(true)}
             >
-              <Text
-                style={[
-                  styles.dropdownText,
-                  { color: category ? currentTheme.textMain : currentTheme.textSecondary },
-                ]}
-              >
+              <Text style={[styles.dropdownText, { color: category ? currentTheme.textMain : currentTheme.textSecondary }]}>
                 {category || "Pilih Kategori..."}
               </Text>
               <Ionicons name="chevron-down" size={20} color={currentTheme.textSecondary} />
@@ -467,16 +415,11 @@ const registerForPushNotificationsAsync = async () => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: currentTheme.textMain }]}>
-              Lokasi Terakhir / Ditemukan
-            </Text>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Lokasi Terakhir / Ditemukan</Text>
             <View style={styles.locationRow}>
               <View style={{ flex: 1, marginRight: 5 }}>
                 <TouchableOpacity
-                  style={[
-                    styles.dropdownSelector,
-                    { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-                  ]}
+                  style={[styles.dropdownSelector, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
                   onPress={() => setBuildingModalVisible(true)}
                 >
                   <Text style={[styles.dropdownText, { color: building ? currentTheme.textMain : currentTheme.textSecondary }]}>
@@ -487,10 +430,7 @@ const registerForPushNotificationsAsync = async () => {
               </View>
               <View style={{ flex: 1, marginLeft: 5 }}>
                 <TouchableOpacity
-                  style={[
-                    styles.dropdownSelector,
-                    { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, opacity: building ? 1 : 0.5 },
-                  ]}
+                  style={[styles.dropdownSelector, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, opacity: building ? 1 : 0.5 }]}
                   disabled={!building}
                   onPress={() => { setFloorModalVisible(true); setMapCoordinate(null); }}
                 >
@@ -503,36 +443,19 @@ const registerForPushNotificationsAsync = async () => {
             </View>
 
             <TouchableOpacity
-              style={[
-                styles.mapButtonFull,
-                { backgroundColor: currentTheme.cardBackground, opacity: building && floor ? 1 : 0.6, borderColor: currentTheme.border },
-              ]}
+              style={[styles.mapButtonFull, { backgroundColor: currentTheme.cardBackground, opacity: building && floor ? 1 : 0.6, borderColor: currentTheme.border }]}
               disabled={!building || !floor}
               onPress={() => setIsMapModalVisible(true)}
             >
-              <Ionicons
-                name="map-outline"
-                size={20}
-                color={building && floor ? Colors.primary : currentTheme.textSecondary}
-                style={{ marginRight: 10 }}
-              />
-              <Text
-                style={[
-                  styles.mapButtonText,
-                  { color: building && floor ? Colors.primary : currentTheme.textSecondary },
-                ]}
-              >
+              <Ionicons name="map-outline" size={20} color={building && floor ? Colors.primary : currentTheme.textSecondary} style={{ marginRight: 10 }} />
+              <Text style={[styles.mapButtonText, { color: building && floor ? Colors.primary : currentTheme.textSecondary }]}>
                 {mapCoordinate ? "Ubah Titik Lokasi" : "Tandai di Peta"}
               </Text>
               <View style={{ flex: 1 }} />
               {mapCoordinate ? (
                 <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />
               ) : (
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={building && floor ? Colors.primary : currentTheme.textSecondary}
-                />
+                <Ionicons name="chevron-forward" size={20} color={building && floor ? Colors.primary : currentTheme.textSecondary} />
               )}
             </TouchableOpacity>
           </View>
@@ -540,11 +463,7 @@ const registerForPushNotificationsAsync = async () => {
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: currentTheme.textMain }]}>Deskripsi Tambahan</Text>
             <TextInput
-              style={[
-                styles.input,
-                styles.textArea,
-                { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.textMain },
-              ]}
+              style={[styles.input, styles.textArea, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.textMain }]}
               placeholder="Ciri-ciri khusus, jam kejadian, dll."
               placeholderTextColor={currentTheme.textSecondary}
               multiline={true}
@@ -556,104 +475,56 @@ const registerForPushNotificationsAsync = async () => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: currentTheme.textMain }]}>
-              Unggah Foto (Opsional)
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.uploadBox,
-                { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-              ]}
-              onPress={handleImageUploadPress}
-            >
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.previewImage} />
-              ) : (
-                <>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Unggah Foto (Maksimal 3)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContainer}>
+              {images.map((uri, index) => (
+                <View key={index} style={styles.imagePreviewWrapper}>
+                  <Image source={{ uri }} style={styles.previewImageMulti} />
+                  <TouchableOpacity style={styles.removeImageBtn} onPress={() => removeImage(index)}>
+                    <Ionicons name="close-circle" size={24} color="#FF3B30" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {images.length < 3 && (
+                <TouchableOpacity style={[styles.addMoreImageBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]} onPress={handleImageUploadPress}>
                   <Ionicons name="camera-outline" size={32} color={currentTheme.textSecondary} />
                   <Text style={[styles.uploadText, { color: currentTheme.textSecondary }]}>
-                    {reportType === "found"
-                      ? "Ketuk untuk mengambil atau memilih foto"
-                      : "Ketuk untuk memilih foto dari galeri"}
+                    {images.length === 0 ? "Tambah Foto" : `${images.length}/3`}
                   </Text>
-                </>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </ScrollView>
           </View>
 
-          <TouchableOpacity
-            style={[styles.submitBtn, isLoading && { opacity: 0.7 }]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
+          <TouchableOpacity style={[styles.submitBtn, isLoading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={isLoading}>
             <Text style={styles.submitBtnText}>
               {isLoading ? "Mengirim Data..." : "Submit Laporan"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
 
-        <DropdownModal
-          visible={isCategoryModalVisible}
-          data={categories}
-          selectedValue={category}
-          onSelect={(item: string) => { setCategory(item); setCategoryModalVisible(false); }}
-          onClose={() => setCategoryModalVisible(false)}
-        />
-        <DropdownModal
-          visible={isBuildingModalVisible}
-          data={buildings}
-          selectedValue={building}
-          onSelect={(item: string) => { setBuilding(item); setBuildingModalVisible(false); setFloor(""); setMapCoordinate(null); }}
-          onClose={() => setBuildingModalVisible(false)}
-        />
-        <DropdownModal
-          visible={isFloorModalVisible}
-          data={floors}
-          selectedValue={floor}
-          onSelect={(item: string) => { setFloor(item); setFloorModalVisible(false); setMapCoordinate(null); }}
-          onClose={() => setFloorModalVisible(false)}
-        />
+        <DropdownModal visible={isCategoryModalVisible} data={categories} selectedValue={category} onSelect={(item: string) => { setCategory(item); setCategoryModalVisible(false); }} onClose={() => setCategoryModalVisible(false)} />
+        <DropdownModal visible={isBuildingModalVisible} data={buildings} selectedValue={building} onSelect={(item: string) => { setBuilding(item); setBuildingModalVisible(false); setFloor(""); setMapCoordinate(null); }} onClose={() => setBuildingModalVisible(false)} />
+        <DropdownModal visible={isFloorModalVisible} data={floors} selectedValue={floor} onSelect={(item: string) => { setFloor(item); setFloorModalVisible(false); setMapCoordinate(null); }} onClose={() => setFloorModalVisible(false)} />
 
         <Modal visible={isImageOptionsModalVisible} transparent={true} animationType="slide">
-          <TouchableOpacity
-            style={styles.modalOverlayActionSheet}
-            activeOpacity={1}
-            onPress={() => setIsImageOptionsModalVisible(false)}
-          >
-            <View
-              style={[
-                styles.actionSheetContent,
-                { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-              ]}
-            >
+          <TouchableOpacity style={styles.modalOverlayActionSheet} activeOpacity={1} onPress={() => setIsImageOptionsModalVisible(false)}>
+            <View style={[styles.actionSheetContent, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
               <View style={styles.actionSheetHandle} />
               <Text style={[styles.actionSheetTitle, { color: currentTheme.textMain }]}>Sumber Foto</Text>
-              <TouchableOpacity
-                style={[styles.actionSheetBtn, { borderBottomColor: currentTheme.border }]}
-                onPress={takePhoto}
-              >
+              <TouchableOpacity style={[styles.actionSheetBtn, { borderBottomColor: currentTheme.border }]} onPress={takePhoto}>
                 <View style={[styles.actionSheetIconBox, { backgroundColor: "rgba(88, 86, 214, 0.1)" }]}>
                   <Ionicons name="camera" size={22} color={Colors.primary} />
                 </View>
-                <Text style={[styles.actionSheetText, { color: currentTheme.textMain }]}>
-                  Buka Kamera Perangkat
-                </Text>
+                <Text style={[styles.actionSheetText, { color: currentTheme.textMain }]}>Buka Kamera Perangkat</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionSheetBtn, { borderBottomColor: currentTheme.border }]}
-                onPress={pickGallery}
-              >
+              <TouchableOpacity style={[styles.actionSheetBtn, { borderBottomColor: currentTheme.border }]} onPress={pickGallery}>
                 <View style={[styles.actionSheetIconBox, { backgroundColor: "rgba(88, 86, 214, 0.1)" }]}>
                   <Ionicons name="images" size={22} color={Colors.primary} />
                 </View>
-                <Text style={[styles.actionSheetText, { color: currentTheme.textMain }]}>
-                  Pilih dari Galeri
-                </Text>
+                <Text style={[styles.actionSheetText, { color: currentTheme.textMain }]}>Pilih dari Galeri</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionSheetCancelBtn}
-                onPress={() => setIsImageOptionsModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.actionSheetCancelBtn} onPress={() => setIsImageOptionsModalVisible(false)}>
                 <Text style={styles.actionSheetCancelText}>Batal</Text>
               </TouchableOpacity>
             </View>
@@ -671,58 +542,25 @@ const registerForPushNotificationsAsync = async () => {
             </View>
 
             <View style={styles.mapViewContainer}>
-              <ScrollView
-                horizontal={true}
-                showsHorizontalScrollIndicator={false}
-                bounces={false}
-                contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}
-              >
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  bounces={false}
-                  contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}
-                >
-                  <Pressable
-                    style={[
-                      styles.mapPressableCanvas,
-                      { width: isMinimized ? minWidth : 1250, height: isMinimized ? minHeight : 900 },
-                    ]}
-                    onLayout={(e) => setMapSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
-                    onPress={handleMapPress}
-                  >
+              <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
+                <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
+                  <Pressable style={[styles.mapPressableCanvas, { width: isMinimized ? minWidth : 1250, height: isMinimized ? minHeight : 900 }]} onLayout={(e) => setMapSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} onPress={handleMapPress}>
                     <Image source={{ uri: getMapImageUrl() }} style={styles.mapImage} />
                     {mapCoordinate && (
-                      <View
-                        pointerEvents="none"
-                        style={[
-                          styles.pinContainer,
-                          {
-                            left: `${mapCoordinate.x * 100}%`,
-                            top: `${mapCoordinate.y * 100}%`,
-                            transform: [{ translateX: -24 }, { translateY: -48 }],
-                          },
-                        ]}
-                      >
+                      <View pointerEvents="none" style={[styles.pinContainer, { left: `${mapCoordinate.x * 100}%`, top: `${mapCoordinate.y * 100}%`, transform: [{ translateX: -24 }, { translateY: -48 }] }]}>
                         <Ionicons name="location" size={48} color="#FF3B30" />
                       </View>
                     )}
                   </Pressable>
                 </ScrollView>
               </ScrollView>
-              <TouchableOpacity
-                style={styles.floatingToggleBtn}
-                onPress={() => setIsMinimized(!isMinimized)}
-              >
+              <TouchableOpacity style={styles.floatingToggleBtn} onPress={() => setIsMinimized(!isMinimized)}>
                 <Ionicons name={isMinimized ? "expand" : "contract"} size={28} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
             <View style={[styles.mapModalFooter, { borderTopColor: currentTheme.border, backgroundColor: currentTheme.cardBackground }]}>
-              <TouchableOpacity
-                style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]}
-                disabled={!mapCoordinate}
-                onPress={() => setIsMapModalVisible(false)}
-              >
+              <TouchableOpacity style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]} disabled={!mapCoordinate} onPress={() => setIsMapModalVisible(false)}>
                 <Text style={styles.mapSaveBtnText}>Simpan Titik</Text>
               </TouchableOpacity>
             </View>
@@ -735,39 +573,6 @@ const registerForPushNotificationsAsync = async () => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  pageHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === "ios" ? 54 : 32,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-  },
-  pageBackBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
-  pageHeaderTitle: { fontSize: 17, fontWeight: "700" },
-  progressContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  stepItem: { alignItems: "center", gap: 4 },
-  stepCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 2,
-    borderColor: "#CCCCCC",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "transparent",
-  },
-  stepDone: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  stepActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  stepLabel: { fontSize: 10, fontWeight: "500" },
-  stepConnector: { flex: 1, height: 2, marginHorizontal: 4, marginBottom: 16 },
   keyboardAvoid: { flex: 1 },
   container: { flex: 1 },
   content: { padding: 20, paddingBottom: 60 },
@@ -819,17 +624,27 @@ const styles = StyleSheet.create({
     height: 55,
   },
   mapButtonText: { fontSize: 16, fontWeight: "500", marginLeft: 10 },
-  uploadBox: {
+  imageScrollContainer: { flexDirection: "row", alignItems: "center" },
+  imagePreviewWrapper: {
+    width: 120,
+    height: 120,
+    marginRight: 15,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  previewImageMulti: { width: "100%", height: "100%", resizeMode: "cover" },
+  removeImageBtn: { position: "absolute", top: 4, right: 4, backgroundColor: "#FFFFFF", borderRadius: 12 },
+  addMoreImageBtn: {
+    width: 120,
+    height: 120,
     borderWidth: 2,
     borderStyle: "dashed",
     borderRadius: 8,
-    height: 150,
-    alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
+    alignItems: "center",
   },
-  uploadText: { marginTop: 10, fontSize: 14, textAlign: "center", paddingHorizontal: 20 },
-  previewImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  uploadText: { marginTop: 10, fontSize: 14, textAlign: "center", paddingHorizontal: 10 },
   submitBtn: { backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 10 },
   submitBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   mapModalContainer: { flex: 1 },

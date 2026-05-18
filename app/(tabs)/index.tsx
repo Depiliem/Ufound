@@ -48,6 +48,18 @@ const CATEGORIES: CategoryOption[] = [
   { label: "Lainnya", value: "Lainnya", icon: "cube-outline" },
 ];
 
+// ── Fungsi Helper Parsing Thumbnail ──────────────────────────────────────────
+const getThumbnail = (urlData: string | null) => {
+  if (!urlData) return null;
+  try {
+    const parsed = JSON.parse(urlData);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+    return urlData;
+  } catch {
+    return urlData;
+  }
+};
+
 export default function Home() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +72,13 @@ export default function Home() {
 
   const { isDarkMode, currentTheme } = useAppContext();
 
-  const filterBuildings = ["Semua", "Gedung A", "Gedung B", "Gedung C", "Gedung D"];
+  const filterBuildings = [
+    "Semua",
+    "Gedung A",
+    "Gedung B",
+    "Gedung C",
+    "Gedung D",
+  ];
 
   // ── Role guard — runs EVERY time this screen is focused ─────────────────
   useFocusEffect(
@@ -79,7 +97,9 @@ export default function Home() {
         if (!cancelled) setRoleChecked(true);
       };
       checkRole();
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }, []),
   );
 
@@ -127,9 +147,12 @@ export default function Home() {
   const filteredItems = items.filter((item) => {
     const matchSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchBuilding = selectedBuilding === "Semua" || item.building === selectedBuilding;
-    const matchCategory = selectedCategory === "All" || item.category === selectedCategory;
+      (item.description &&
+        item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchBuilding =
+      selectedBuilding === "Semua" || item.building === selectedBuilding;
+    const matchCategory =
+      selectedCategory === "All" || item.category === selectedCategory;
     return matchSearch && matchBuilding && matchCategory;
   });
 
@@ -143,63 +166,125 @@ export default function Home() {
   // Render loading spinner while role check is pending
   if (!roleChecked) {
     return (
-      <View style={[styles.container, { backgroundColor: currentTheme.background, justifyContent: "center", alignItems: "center" }]}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: currentTheme.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
         <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
 
-  const renderItem = ({ item }: { item: Item }) => (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-      onPress={() => router.push(`/detail/${item.id}`)}
-    >
-      <View style={styles.imageWrapper}>
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-        ) : (
-          <View style={[styles.noImageContainer, { backgroundColor: currentTheme.background }]}>
-            <Ionicons name="image-outline" size={40} color={currentTheme.textSecondary} />
-          </View>
-        )}
-        <View style={styles.categoryOverlay}>
-          <Text style={styles.categoryOverlayText}>{item.category}</Text>
-        </View>
-        <View style={[styles.typeBadgeOverlay, activeTab === "lost" ? styles.typeBadgeLost : styles.typeBadgeFound]}>
-          <Text style={styles.typeBadgeOverlayText}>{activeTab === "lost" ? "Hilang" : "Ditemukan"}</Text>
-        </View>
-      </View>
+  const renderItem = ({ item }: { item: Item }) => {
+    const thumbnailUri = getThumbnail(item.image_url);
 
-      <View style={styles.cardContent}>
-        <Text style={[styles.itemName, { color: currentTheme.textMain }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={14} color={currentTheme.textSecondary} />
-          <Text style={[styles.locationText, { color: currentTheme.textSecondary }]}>
-            {item.building} · {item.floor}
-          </Text>
+    return (
+      <TouchableOpacity
+        style={[
+          styles.card,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}
+        onPress={() => router.push(`/detail/${item.id}`)}
+      >
+        <View style={styles.imageWrapper}>
+          {thumbnailUri ? (
+            <Image source={{ uri: thumbnailUri }} style={styles.cardImage} />
+          ) : (
+            <View
+              style={[
+                styles.noImageContainer,
+                { backgroundColor: currentTheme.background },
+              ]}
+            >
+              <Ionicons
+                name="image-outline"
+                size={40}
+                color={currentTheme.textSecondary}
+              />
+            </View>
+          )}
+          <View style={styles.categoryOverlay}>
+            <Text style={styles.categoryOverlayText}>{item.category}</Text>
+          </View>
+          <View
+            style={[
+              styles.typeBadgeOverlay,
+              activeTab === "lost"
+                ? styles.typeBadgeLost
+                : styles.typeBadgeFound,
+            ]}
+          >
+            <Text style={styles.typeBadgeOverlayText}>
+              {activeTab === "lost" ? "Hilang" : "Ditemukan"}
+            </Text>
+          </View>
         </View>
-        <View style={styles.dateRow}>
-          <Ionicons name="time-outline" size={13} color={currentTheme.textSecondary} />
-          <Text style={[styles.dateText, { color: currentTheme.textSecondary }]}>
-            {formatDate(item.created_at)}
+
+        <View style={styles.cardContent}>
+          <Text
+            style={[styles.itemName, { color: currentTheme.textMain }]}
+            numberOfLines={1}
+          >
+            {item.name}
           </Text>
+          <View style={styles.locationRow}>
+            <Ionicons
+              name="location-outline"
+              size={14}
+              color={currentTheme.textSecondary}
+            />
+            <Text
+              style={[
+                styles.locationText,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
+              {item.building} · {item.floor}
+            </Text>
+          </View>
+          <View style={styles.dateRow}>
+            <Ionicons
+              name="time-outline"
+              size={13}
+              color={currentTheme.textSecondary}
+            />
+            <Text
+              style={[styles.dateText, { color: currentTheme.textSecondary }]}
+            >
+              {formatDate(item.created_at)}
+            </Text>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={currentTheme.background} />
-      <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-
+      <StatusBar
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
+        backgroundColor={currentTheme.background}
+      />
+      <View
+        style={[styles.container, { backgroundColor: currentTheme.background }]}
+      >
         {/* Top Header */}
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
           <View style={styles.headerIcons}>
-            <TouchableOpacity onPress={() => router.push("/history")} style={styles.iconButton}>
+            <TouchableOpacity
+              onPress={() => router.push("/history")}
+              style={styles.iconButton}
+            >
               <Ionicons name="time" size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -208,18 +293,38 @@ export default function Home() {
         {/* Lost / Found Tabs */}
         <View style={styles.tabContainer}>
           <TouchableOpacity
-            style={[styles.tabButton, { borderBottomColor: currentTheme.border }, activeTab === "lost" && { borderBottomColor: Colors.primary }]}
+            style={[
+              styles.tabButton,
+              { borderBottomColor: currentTheme.border },
+              activeTab === "lost" && { borderBottomColor: Colors.primary },
+            ]}
             onPress={() => handleTabSwitch("lost")}
           >
-            <Text style={[styles.tabText, { color: currentTheme.textSecondary }, activeTab === "lost" && { color: Colors.primary }]}>
+            <Text
+              style={[
+                styles.tabText,
+                { color: currentTheme.textSecondary },
+                activeTab === "lost" && { color: Colors.primary },
+              ]}
+            >
               Lost Items
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabButton, { borderBottomColor: currentTheme.border }, activeTab === "found" && { borderBottomColor: Colors.primary }]}
+            style={[
+              styles.tabButton,
+              { borderBottomColor: currentTheme.border },
+              activeTab === "found" && { borderBottomColor: Colors.primary },
+            ]}
             onPress={() => handleTabSwitch("found")}
           >
-            <Text style={[styles.tabText, { color: currentTheme.textSecondary }, activeTab === "found" && { color: Colors.primary }]}>
+            <Text
+              style={[
+                styles.tabText,
+                { color: currentTheme.textSecondary },
+                activeTab === "found" && { color: Colors.primary },
+              ]}
+            >
               Found Items
             </Text>
           </TouchableOpacity>
@@ -227,7 +332,15 @@ export default function Home() {
 
         {/* Search Bar */}
         <View style={styles.searchSection}>
-          <View style={[styles.searchBar, { backgroundColor: currentTheme.searchBackground, borderColor: currentTheme.border }]}>
+          <View
+            style={[
+              styles.searchBar,
+              {
+                backgroundColor: currentTheme.searchBackground,
+                borderColor: currentTheme.border,
+              },
+            ]}
+          >
             <TextInput
               style={[styles.searchInput, { color: currentTheme.textMain }]}
               placeholder={`Search ${activeTab} item`}
@@ -235,24 +348,63 @@ export default function Home() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            <Ionicons name="search" size={20} color={currentTheme.textSecondary} style={styles.searchIcon} />
+            <Ionicons
+              name="search"
+              size={20}
+              color={currentTheme.textSecondary}
+              style={styles.searchIcon}
+            />
           </View>
         </View>
 
         {/* Category Filter */}
         <View style={styles.categorySection}>
-          <Text style={[styles.categorySectionLabel, { color: currentTheme.textSecondary }]}>Category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+          <Text
+            style={[
+              styles.categorySectionLabel,
+              { color: currentTheme.textSecondary },
+            ]}
+          >
+            Category
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+          >
             {CATEGORIES.map((cat) => {
               const isActive = selectedCategory === cat.value;
               return (
                 <TouchableOpacity
                   key={cat.value}
-                  style={[styles.categoryChip, { backgroundColor: isActive ? Colors.primary : currentTheme.cardBackground, borderColor: isActive ? Colors.primary : currentTheme.border }]}
+                  style={[
+                    styles.categoryChip,
+                    {
+                      backgroundColor: isActive
+                        ? Colors.primary
+                        : currentTheme.cardBackground,
+                      borderColor: isActive
+                        ? Colors.primary
+                        : currentTheme.border,
+                    },
+                  ]}
                   onPress={() => setSelectedCategory(cat.value)}
                 >
-                  <Ionicons name={cat.icon as any} size={13} color={isActive ? "#FFFFFF" : currentTheme.textSecondary} />
-                  <Text style={[styles.categoryChipText, { color: isActive ? "#FFFFFF" : currentTheme.textSecondary }]}>
+                  <Ionicons
+                    name={cat.icon as any}
+                    size={13}
+                    color={isActive ? "#FFFFFF" : currentTheme.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      {
+                        color: isActive
+                          ? "#FFFFFF"
+                          : currentTheme.textSecondary,
+                      },
+                    ]}
+                  >
                     {cat.label}
                   </Text>
                 </TouchableOpacity>
@@ -263,14 +415,37 @@ export default function Home() {
 
         {/* Building Filter */}
         <View style={styles.filterSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+          >
             {filterBuildings.map((bldg, index) => (
               <TouchableOpacity
                 key={index}
-                style={[styles.filterChip, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }, selectedBuilding === bldg && { backgroundColor: currentTheme.chipActive, borderColor: currentTheme.chipActive }]}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: currentTheme.cardBackground,
+                    borderColor: currentTheme.border,
+                  },
+                  selectedBuilding === bldg && {
+                    backgroundColor: currentTheme.chipActive,
+                    borderColor: currentTheme.chipActive,
+                  },
+                ]}
                 onPress={() => setSelectedBuilding(bldg)}
               >
-                <Text style={[styles.filterChipText, { color: currentTheme.textSecondary }, selectedBuilding === bldg && { color: currentTheme.textMain, fontWeight: "bold" }]}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    { color: currentTheme.textSecondary },
+                    selectedBuilding === bldg && {
+                      color: currentTheme.textMain,
+                      fontWeight: "bold",
+                    },
+                  ]}
+                >
                   {bldg}
                 </Text>
               </TouchableOpacity>
@@ -281,7 +456,12 @@ export default function Home() {
         {/* Results count */}
         {!loading && (
           <View style={styles.resultsBar}>
-            <Text style={[styles.resultsCount, { color: currentTheme.textSecondary }]}>
+            <Text
+              style={[
+                styles.resultsCount,
+                { color: currentTheme.textSecondary },
+              ]}
+            >
               {filteredItems.length} item ditemukan
             </Text>
           </View>
@@ -294,14 +474,24 @@ export default function Home() {
           </View>
         ) : filteredItems.length === 0 ? (
           <View style={styles.centerContent}>
-            <Ionicons name="search-outline" size={60} color={currentTheme.iconEmpty} />
-            <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
+            <Ionicons
+              name="search-outline"
+              size={60}
+              color={currentTheme.iconEmpty}
+            />
+            <Text
+              style={[styles.emptyText, { color: currentTheme.textSecondary }]}
+            >
               Tidak ada data yang sesuai.
             </Text>
           </View>
         ) : (
           <FlatList
-            data={filteredItems.length % 2 !== 0 ? [...filteredItems, { id: "__placeholder__" } as any] : filteredItems}
+            data={
+              filteredItems.length % 2 !== 0
+                ? [...filteredItems, { id: "__placeholder__" } as any]
+                : filteredItems
+            }
             keyExtractor={(item) => item.id}
             renderItem={({ item }) =>
               item.id === "__placeholder__" ? (
@@ -314,7 +504,13 @@ export default function Home() {
             columnWrapperStyle={styles.columnWrapper}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[Colors.primary]}
+              />
+            }
           />
         )}
       </View>
@@ -332,24 +528,67 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: Colors.primary,
   },
-  topHeaderTitle: { fontSize: 18, fontWeight: "bold", color: "#FFFFFF", letterSpacing: 1 },
+  topHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+  },
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
   tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
-  tabButton: { flex: 1, paddingVertical: 10, alignItems: "center", borderBottomWidth: 2 },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderBottomWidth: 2,
+  },
   tabText: { fontSize: 14, fontWeight: "600" },
   searchSection: { paddingHorizontal: 20, paddingTop: 12, marginBottom: 10 },
-  searchBar: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 20, paddingHorizontal: 15, height: 40 },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    height: 40,
+  },
   searchInput: { flex: 1, fontSize: 14 },
   searchIcon: { marginLeft: 10 },
-  categorySection: { paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
-  categorySectionLabel: { fontSize: 11, fontWeight: "600", letterSpacing: 0.5, textTransform: "uppercase", paddingHorizontal: 20, marginBottom: 8 },
+  categorySection: {
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.05)",
+  },
+  categorySectionLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
   categoryScroll: { paddingHorizontal: 20 },
-  categoryChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, marginRight: 8 },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: 8,
+  },
   categoryChipText: { fontSize: 12, fontWeight: "500" },
   filterSection: { marginTop: 10, marginBottom: 4 },
   filterScroll: { paddingHorizontal: 20 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 8, borderWidth: 1, marginRight: 8 },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+  },
   filterChipText: { fontSize: 12, fontWeight: "500" },
   resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
   resultsCount: { fontSize: 12 },
@@ -358,20 +597,55 @@ const styles = StyleSheet.create({
   card: { flex: 1, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
   imageWrapper: { position: "relative" },
   cardImage: { width: "100%", height: 120, resizeMode: "cover" },
-  noImageContainer: { width: "100%", height: 120, justifyContent: "center", alignItems: "center" },
-  categoryOverlay: { position: "absolute", bottom: 6, left: 6, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  noImageContainer: {
+    width: "100%",
+    height: 120,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  categoryOverlay: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   categoryOverlayText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
-  typeBadgeOverlay: { position: "absolute", top: 6, right: 6, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  typeBadgeOverlay: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   typeBadgeLost: { backgroundColor: "rgba(226,75,74,0.85)" },
   typeBadgeFound: { backgroundColor: "rgba(59,109,17,0.85)" },
   typeBadgeOverlayText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600" },
   cardContent: { padding: 10 },
   itemName: { fontSize: 13, fontWeight: "600", marginBottom: 5 },
-  locationRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 3 },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 3,
+  },
   locationText: { fontSize: 11, flex: 1 },
   dateRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   dateText: { fontSize: 11 },
-  cardPlaceholder: { flex: 1, borderRadius: 12, overflow: "hidden", backgroundColor: "transparent" },
-  centerContent: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 30 },
+  cardPlaceholder: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "transparent",
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 30,
+  },
   emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
 });
