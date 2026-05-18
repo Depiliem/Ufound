@@ -22,7 +22,46 @@ type UserData = {
   email: string;
   role: string;
 };
-const PROFILE_IMAGE = { uri: "https://randomuser.me/api/portraits/men/9.jpg" };
+
+type Stats = {
+  totalLost: number;
+  totalFound: number;
+  approved: number;
+  pending: number;
+};
+
+function DefaultAvatar({ size = 90 }: { size?: number }) {
+  return (
+    <View style={{
+      width: size,
+      height: size,
+      borderRadius: size / 2,
+      backgroundColor: "#B0B0B0",
+      justifyContent: "flex-end",
+      alignItems: "center",
+      overflow: "hidden",
+    }}>
+      {/* Kepala */}
+      <View style={{
+        width: size * 0.38,
+        height: size * 0.38,
+        borderRadius: size * 0.19,
+        backgroundColor: "#D4D4D4",
+        position: "absolute",
+        top: size * 0.18,
+      }} />
+      {/* Badan */}
+      <View style={{
+        width: size * 0.7,
+        height: size * 0.5,
+        borderRadius: (size * 0.7) / 2,
+        backgroundColor: "#D4D4D4",
+        marginBottom: -size * 0.1,
+      }} />
+    </View>
+  );
+}
+
 
 export default function ProfileScreen() {
   const { isDarkMode, toggleTheme, currentTheme } = useAppContext();

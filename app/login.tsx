@@ -198,6 +198,23 @@ export default function Login() {
               <Text style={styles.loginBtnText}>Login</Text>
             )}
           </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* SSO button */}
+          <TouchableOpacity
+            style={styles.ssoBtn}
+            onPress={() => router.push("/sso")}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="shield-checkmark-outline" size={18} color="#2B7FE0" style={styles.ssoIcon} />
+            <Text style={styles.ssoBtnText}>Login with SSO</Text>
+          </TouchableOpacity>
         </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -270,5 +287,41 @@ const styles = StyleSheet.create({
   },
   loginBtnDisabled: {
     opacity: 0.6,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: BORDER,
+  },
+  dividerText: {
+    marginHorizontal: 14,
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#4A5570",
+    letterSpacing: 1,
+  },
+  ssoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: "#2B7FE0",
+    borderRadius: 14,
+    paddingVertical: 16,
+  },
+  ssoIcon: {
+    marginRight: 8,
+  },
+  ssoBtnText: {
+    color: "#2B7FE0",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
