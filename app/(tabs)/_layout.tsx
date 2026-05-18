@@ -17,9 +17,6 @@ function CustomTabBarButton({ children, onPress }: any) {
     </TouchableOpacity>
   );
 }
-
-
-
 export default function TabLayout() {
   const { currentTheme } = useAppContext();
   return (
@@ -32,7 +29,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="user"
         options={{
           title: "Home",
           tabBarIcon: ({ color }) => (

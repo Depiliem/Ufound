@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Header from "../../components/Header";
 import { Colors } from "../../constants/Colors";
 import { useAppContext } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
@@ -278,17 +279,7 @@ export default function Home() {
         style={[styles.container, { backgroundColor: currentTheme.background }]}
       >
         {/* Top Header */}
-        <View style={styles.topHeader}>
-          <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
-          <View style={styles.headerIcons}>
-            <TouchableOpacity
-              onPress={() => router.push("/history")}
-              style={styles.iconButton}
-            >
-              <Ionicons name="time" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        </View>
+        <Header title="LOST N FOUND" />
 
         {/* Lost / Found Tabs */}
         <View style={styles.tabContainer}>
@@ -520,22 +511,6 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: Colors.primary,
-  },
-  topHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    letterSpacing: 1,
-  },
-  headerIcons: { flexDirection: "row", alignItems: "center" },
-  iconButton: { marginLeft: 15 },
   tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
   tabButton: {
     flex: 1,

@@ -1,15 +1,3 @@
-/**
- * app/sso.tsx — v7
- * Dirancang untuk: npx expo start --dev-client
- *
- * Flow:
- *   1. Input email (@umn.ac.id / @student.umn.ac.id / @lecturer.umn.ac.id)
- *   2. Cek email di DB → kirim magic link
- *   3. User klik link di email → deep link ufound:// buka app
- *   4. app/auth/callback.tsx tangkap token → redirect ke sso?verified=true
- *   5. Input NIM + password → login
- */
-
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
@@ -30,7 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 
-type Step = "email" | "sent" | "verify" | "loading" | "error";
+type Step = "email" | "sent" | "verify" | "new_user" | "loading" | "error";
 
 const ALLOWED_DOMAINS = ["@umn.ac.id", "@student.umn.ac.id", "@lecturer.umn.ac.id"];
 
@@ -61,27 +49,64 @@ export default function SSOLogin() {
   const [step, setStep]           = useState<Step>("email");
   const [email, setEmail]         = useState("");
   const [nim, setNim]             = useState("");
+  const [nama, setNama]           = useState("");
   const [password, setPassword]   = useState("");
+  const [confirmPass, setConfirm] = useState("");
   const [showPass, setShowPass]   = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [errorMsg, setErrorMsg]   = useState("");
   const [loading, setLoading]     = useState(false);
   const [pendingEmail, setPending] = useState("");
+  const [isNewUser, setIsNewUser] = useState(false);
 
   // ── Terima hasil dari auth/callback ──────────────────────────────────────
+  const { verified, email: verifiedEmailParam } = params;
   useEffect(() => {
-    if (params.verified === "true" && params.email) {
-      setPending(params.email);
-      setStep("verify");
-    } else if (params.verified === "error") {
+    if (!verified) return; // params kosong {} — abaikan
+    if (verified === "true" && verifiedEmailParam) {
+      console.log("[Register] ✅ Email terverifikasi:", verifiedEmailParam);
+      setPending(verifiedEmailParam);
+      checkUserExists(verifiedEmailParam);
+    } else if (verified === "error") {
+      console.log("[Register] ❌ Verifikasi gagal dari callback");
       setErrorMsg("Link tidak valid atau sudah kadaluarsa. Minta link baru.");
       setStep("error");
     }
-  }, [params.verified, params.email]);
+  }, [verified, verifiedEmailParam]);
+
+  // ── Cek apakah email sudah terdaftar di DB ───────────────────────────────
+  const checkUserExists = async (verifiedEmail: string) => {
+    setStep("loading");
+    console.log("[Register] ⏳ Cek user di DB untuk:", verifiedEmail);
+    try {
+      const { data: user } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", verifiedEmail.toLowerCase())
+        .maybeSingle();
+
+      if (user) {
+        console.log("[Register] ✅ User sudah ada → step verify (login)");
+        setIsNewUser(false);
+        setStep("verify");
+      } else {
+        console.log("[Register] ℹ️ User belum ada → step new_user (daftar)");
+        setIsNewUser(true);
+        setStep("new_user");
+      }
+    } catch (e) {
+      console.error("[Register] Gagal cek user:", e);
+      setStep("verify");
+    }
+  };
 
   // ── Step 1: Kirim magic link ──────────────────────────────────────────────
   const handleSendLink = async () => {
     const trimmed = email.trim().toLowerCase();
     const validDomain = ALLOWED_DOMAINS.some(d => trimmed.endsWith(d));
+
+    console.log("\n[Register] ══════ KIRIM MAGIC LINK ══════");
+    console.log("[Register] Email:", trimmed, "| Domain valid:", validDomain);
 
     if (!validDomain) {
       setErrorMsg("Gunakan email @umn.ac.id, @student.umn.ac.id, atau @lecturer.umn.ac.id");
@@ -92,38 +117,30 @@ export default function SSOLogin() {
     setErrorMsg("");
 
     try {
-      // Cek apakah email terdaftar di DB
-      const { data: user, error: dbErr } = await supabase
-        .from("users")
-        .select("id")
-        .eq("email", trimmed)
-        .single();
-
-      if (dbErr || !user) {
-        setErrorMsg("Email ini tidak terdaftar di sistem UFound.\nHubungi admin untuk mendaftar.");
-        setLoading(false);
-        return;
-      }
-
-      // Kirim magic link — redirect ke Supabase dulu, lalu ke deep link
+      // Kirim magic link langsung — cek DB dilakukan setelah email terverifikasi
+      console.log("[Register] ⏳ Mengirim magic link...");
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmed,
         options: {
-          // Supabase akan redirect ke ini setelah konfirmasi
-          // Lalu dari Supabase redirect ke deep link ufound://
           emailRedirectTo: "ufound://auth/callback",
-          shouldCreateUser: false,
+          shouldCreateUser: true, // izinkan user baru agar bisa register
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.log("[Register] ❌ Error OTP:", JSON.stringify(error));
+        throw error;
+      }
 
+      console.log("[Register] ✅ Magic link terkirim ke:", trimmed);
       setPending(trimmed);
       setStep("sent");
     } catch (e: any) {
+      console.error("[Register] ❌ Exception:", e?.message);
       setErrorMsg(e?.message ?? "Gagal mengirim link. Coba lagi.");
     } finally {
       setLoading(false);
+      console.log("[Register] ══════════════════════════════\n");
     }
   };
 
@@ -166,7 +183,7 @@ export default function SSOLogin() {
       }));
 
       if (user.role === "admin") router.replace("/admin");
-      else router.replace("/(tabs)");
+      else router.replace("/(tabs)/user");
 
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Terjadi kesalahan. Coba lagi.");
@@ -175,7 +192,68 @@ export default function SSOLogin() {
     }
   };
 
-  // ── UI ────────────────────────────────────────────────────────────────────
+  // ── Step 3: Daftar user baru ──────────────────────────────────────────────
+  const handleRegister = async () => {
+    const isLecturer = pendingEmail.endsWith("@lecturer.umn.ac.id");
+    if (!nama.trim() || (!isLecturer && !nim.trim()) || !password.trim() || !confirmPass.trim()) {
+      setErrorMsg(isLecturer ? "Nama, password, dan konfirmasi wajib diisi." : "Semua field wajib diisi.");
+      return;
+    }
+    if (password !== confirmPass) {
+      setErrorMsg("Password dan konfirmasi password tidak sama.");
+      return;
+    }
+    if (password.length < 8) {
+      setErrorMsg("Password minimal 8 karakter.");
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg("");
+
+    console.log("\n[Register] ══════ DAFTAR USER BARU ══════");
+    console.log("[Register] Email:", pendingEmail);
+    console.log("[Register] Nama:", nama.trim());
+    console.log("[Register] NIM:", nim.trim());
+
+    try {
+      // Hash password via RPC (pakai fungsi pgcrypto yang sama)
+      console.log("[Register] ⏳ Menyimpan user baru ke DB...");
+      const { data, error } = await supabase
+        .from("users")
+        .insert({
+          email:    pendingEmail,
+          name:     nama.trim(),
+          nim:      isLecturer ? null : nim.trim(),
+          password: password,
+          role:     pendingEmail.endsWith("@lecturer.umn.ac.id") ? "lecturer" : "student",
+        })
+        .select("id, name, nim, email, role")
+        .single();
+
+      if (error) {
+        console.log("[Register] ❌ Insert error:", JSON.stringify(error));
+        throw error;
+      }
+
+      console.log("[Register] ✅ User berhasil dibuat:", data.id);
+      await AsyncStorage.setItem("current_user", JSON.stringify({
+        id:    data.id,
+        name:  data.name,
+        nim:   data.nim,
+        email: data.email,
+        role:  data.role,
+      }));
+
+      router.replace("/(tabs)/user");
+    } catch (e: any) {
+      console.error("[Register] ❌ Exception:", e?.message);
+      setErrorMsg(e?.message ?? "Gagal mendaftar. Coba lagi.");
+    } finally {
+      setLoading(false);
+      console.log("[Register] ══════════════════════════════\n");
+    }
+  };
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={BG} />
@@ -201,13 +279,13 @@ export default function SSOLogin() {
               <View style={styles.iconWrap}>
                 <Ionicons name="mail-outline" size={30} color="#2B7FE0" />
               </View>
-              <Text style={styles.title}>Masuk dengan SSO</Text>
+              <Text style={styles.title}>Registrasi akun kamu</Text>
               <Text style={styles.subtitle}>
-                Masukkan email institusi UMN kamu{"\n"}untuk menerima link verifikasi
+                Masukkan email UMN kamu{"\n"}untuk menerima link verifikasi
               </Text>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email Institusi</Text>
+                <Text style={styles.label}>Email Universitas</Text>
                 <View style={[styles.inputWrap, errorMsg ? styles.inputError : null]}>
                   <Ionicons name="at-outline" size={17} color="#4A5570" style={styles.inputIcon} />
                   <TextInput
@@ -224,9 +302,18 @@ export default function SSOLogin() {
                 </View>
                 <View style={styles.domainRow}>
                   {ALLOWED_DOMAINS.map(d => (
-                    <View key={d} style={styles.domainChip}>
+                    <TouchableOpacity
+                      key={d}
+                      style={styles.domainChip}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        const local = email.includes("@") ? email.split("@")[0] : email;
+                        setEmail(local + d);
+                        setErrorMsg("");
+                      }}
+                    >
                       <Text style={styles.domainChipText}>{d}</Text>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               </View>
@@ -249,16 +336,10 @@ export default function SSOLogin() {
               </TouchableOpacity>
 
               <View style={styles.infoCard}>
-                {[
-                  { icon: "time-outline",             text: "Link berlaku 10 menit" },
-                  { icon: "phone-portrait-outline",   text: "Setelah klik link, masukkan NIM & password" },
-                  { icon: "checkmark-circle-outline", text: "Hanya akun terdaftar yang bisa masuk" },
-                ].map((item, i) => (
-                  <View key={i} style={[styles.infoRow, i < 2 && styles.infoRowBorder]}>
-                    <Ionicons name={item.icon as any} size={14} color="#2B7FE0" style={{ marginRight: 10 }} />
-                    <Text style={styles.infoText}>{item.text}</Text>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoText}>Setelah klik link, masukkan NIM & password</Text>
                   </View>
-                ))}
+                
               </View>
             </StepView>
           )}
@@ -279,10 +360,9 @@ export default function SSOLogin() {
               <View style={styles.stepsCard}>
                 {[
                   { num: "1", text: "Buka inbox email UMN kamu" },
-                  { num: "2", text: 'Klik tombol "Log In" di email dari UFound' },
-                  { num: "3", text: "App akan terbuka otomatis, lalu masukkan NIM & password" },
+                  { num: "2", text: 'Klik tombol "Verifikasi & masuk" di email dari UFound' }
                 ].map((s, i) => (
-                  <View key={i} style={[styles.stepRow, i < 2 && styles.stepRowBorder]}>
+                  <View key={i} style={[styles.stepRow, i < 1 && styles.stepRowBorder]}>
                     <View style={styles.stepNum}>
                       <Text style={styles.stepNumText}>{s.num}</Text>
                     </View>
@@ -411,6 +491,119 @@ export default function SSOLogin() {
               </TouchableOpacity>
             </StepView>
           )}
+
+          {/* ── new_user (register) ── */}
+          {step === "new_user" && (
+            <StepView style={styles.stepWrap}>
+              <View style={[styles.iconWrap, { backgroundColor: "#34C77B15", borderColor: "#34C77B30" }]}>
+                <Ionicons name="person-add-outline" size={30} color="#34C77B" />
+              </View>
+              <Text style={styles.title}>Buat Akun Baru</Text>
+              <Text style={styles.subtitle}>
+                Email terverifikasi! Lengkapi data{"\n"}untuk membuat akun UFound kamu
+              </Text>
+
+              {/* Email readonly */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <View style={[styles.inputWrap, { opacity: 0.6 }]}>
+                  <Ionicons name="at-outline" size={17} color="#4A5570" style={styles.inputIcon} />
+                  <Text style={[styles.input, { color: "#8A9AB8", paddingVertical: 2 }]}>{pendingEmail}</Text>
+                  <Ionicons name="checkmark-circle" size={16} color="#34C77B" />
+                </View>
+              </View>
+
+              {/* Nama */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Nama Lengkap</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="person-outline" size={17} color="#4A5570" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Nama sesuai KTM"
+                    placeholderTextColor="#4A5570"
+                    autoCapitalize="words"
+                    value={nama}
+                    onChangeText={t => { setNama(t); setErrorMsg(""); }}
+                  />
+                </View>
+              </View>
+
+              {/* NIM — hanya untuk mahasiswa */}
+              {!pendingEmail.endsWith("@lecturer.umn.ac.id") && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>NIM</Text>
+                  <View style={styles.inputWrap}>
+                    <Ionicons name="id-card-outline" size={17} color="#4A5570" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Nomor Induk Mahasiswa"
+                      placeholderTextColor="#4A5570"
+                      keyboardType="numeric"
+                      value={nim}
+                      onChangeText={t => { setNim(t); setErrorMsg(""); }}
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* Password */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="lock-closed-outline" size={17} color="#4A5570" style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { paddingRight: 44 }]}
+                    placeholder="Min. 8 karakter"
+                    placeholderTextColor="#4A5570"
+                    secureTextEntry={!showPass}
+                    value={password}
+                    onChangeText={t => { setPassword(t); setErrorMsg(""); }}
+                  />
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPass(p => !p)} activeOpacity={0.7}>
+                    <Ionicons name={showPass ? "eye-outline" : "eye-off-outline"} size={17} color="#4A5570" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Konfirmasi Password */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Konfirmasi Password</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="lock-closed-outline" size={17} color="#4A5570" style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { paddingRight: 44 }]}
+                    placeholder="Ulangi password"
+                    placeholderTextColor="#4A5570"
+                    secureTextEntry={!showConfirm}
+                    value={confirmPass}
+                    onChangeText={t => { setConfirm(t); setErrorMsg(""); }}
+                    onSubmitEditing={handleRegister}
+                  />
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirm(p => !p)} activeOpacity={0.7}>
+                    <Ionicons name={showConfirm ? "eye-outline" : "eye-off-outline"} size={17} color="#4A5570" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {errorMsg ? <ErrorBox msg={errorMsg} /> : null}
+
+              <TouchableOpacity
+                style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                onPress={handleRegister}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading
+                  ? <ActivityIndicator size="small" color="#161C2C" />
+                  : <>
+                      <Ionicons name="person-add-outline" size={17} color="#161C2C" style={{ marginRight: 8 }} />
+                      <Text style={styles.primaryBtnText}>Buat Akun</Text>
+                    </>
+                }
+              </TouchableOpacity>
+            </StepView>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -434,7 +627,7 @@ const BORDER = "#2A3350";
 
 const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: BG },
-  scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 40 },
+  scroll: { flexGrow: 1, justifyContent: "flex-start", paddingHorizontal: 24, paddingVertical: 10 },
   backBtn: {
     width: 38, height: 38, borderRadius: 10, backgroundColor: CARD,
     alignItems: "center", justifyContent: "center", marginBottom: 28, alignSelf: "flex-start",
