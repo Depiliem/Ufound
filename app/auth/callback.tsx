@@ -15,10 +15,13 @@ export default function AuthCallback() {
     isHandled = true;
 
     const url = deepLinkStore.get();
-    deepLinkStore.clear();
+    deepLinkStore.clear(); // Store dibersihkan di sini, jadi tidak bisa dipanggil lagi di bawah
 
     console.log("[Callback] ══════ RAW URL ══════");
-    console.log("[Callback] URL dari store:", url ? url.substring(0, 80) + "…" : null);
+    console.log(
+      "[Callback] URL dari store:",
+      url ? url.substring(0, 80) + "…" : null,
+    );
 
     if (!url) {
       console.log("[Callback] ❌ Tidak ada URL di store");
@@ -29,7 +32,9 @@ export default function AuthCallback() {
     handleDeepLink(url);
 
     // Reset guard saat unmount agar bisa dipakai lagi di sesi berikutnya
-    return () => { isHandled = false; };
+    return () => {
+      isHandled = false;
+    };
   }, []);
 
   const handleDeepLink = async (url: string) => {
@@ -37,15 +42,22 @@ export default function AuthCallback() {
       const allParams = parseAllParams(url);
       console.log("[Callback] Params keys:", Object.keys(allParams).join(", "));
 
-      const token_hash    = allParams["token_hash"];
-      const access_token  = allParams["access_token"];
+      const token_hash = allParams["token_hash"];
+      const access_token = allParams["access_token"];
       const refresh_token = allParams["refresh_token"];
-      const error         = allParams["error"];
-      const error_desc    = allParams["error_description"];
+      const type = allParams["type"]; // <--- PERBAIKAN 1: Ekstrak tipe link (magiclink / recovery)
+      const error = allParams["error"];
+      const error_desc = allParams["error_description"];
+
+      // Tentukan rute fallback jika terjadi error
+      const errorPath = type === "recovery" ? "/forgot-password" : "/register";
 
       if (error) {
         console.log("[Callback] ❌ Error dari Supabase:", error, error_desc);
-        router.replace({ pathname: "/register", params: { verified: "error" } });
+        router.replace({
+          pathname: errorPath,
+          params: { verified: "error" },
+        });
         return;
       }
 
@@ -56,14 +68,14 @@ export default function AuthCallback() {
 
         const { data, error: otpErr } = await supabase.auth.verifyOtp({
           token_hash,
-          type: "magiclink",
+          type: (type as any) || "magiclink", // <--- PERBAIKAN 2: Gunakan tipe dinamis, jangan hardcode "magiclink"
         });
 
         if (otpErr) throw otpErr;
 
         const email = data.user?.email ?? "";
         console.log("[Callback] ✅ PKCE berhasil, email:", email);
-        redirect(email);
+        redirect(email, type, url); // <--- PERBAIKAN 3: Kirim parameter type dan url mentah ke fungsi redirect
         return;
       }
 
@@ -81,23 +93,34 @@ export default function AuthCallback() {
 
         const email = data.user?.email ?? "";
         console.log("[Callback] ✅ Implicit berhasil, email:", email);
-        redirect(email);
+        redirect(email, type, url); // <--- PERBAIKAN 3: Kirim parameter type dan url mentah
         return;
       }
 
       console.log("[Callback] ❌ Tidak ada token ditemukan di URL");
-      router.replace({ pathname: "/register", params: { verified: "error" } });
-
+      router.replace({ pathname: errorPath, params: { verified: "error" } });
     } catch (e: any) {
       console.error("[Callback] ❌ Exception:", e?.message);
-      router.replace({ pathname: "/register", params: { verified: "error" } });
+      // Fallback ke login jika gagal memilah
+      router.replace({ pathname: "./index" });
     }
   };
 
-  const redirect = (email: string) => {
+  // ── UPDATE: Logic Redirect Dinamis ──
+  // Menambahkan parameter rawUrl untuk berjaga-jaga jika 'type' tidak terdeteksi langsung
+  const redirect = (email: string, type?: string, rawUrl: string = "") => {
     setMessage("Berhasil! Mengarahkan…");
+
+    // Deteksi jika ini adalah jalur Lupa Password
+    const isRecovery = type === "recovery" || rawUrl.includes("type=recovery");
+
+    // Jika recovery, arahkan ke forgot-password. Jika tidak, ke register.
+    const targetPath = isRecovery ? "/forgot-password" : "/register";
+
+    console.log(`[Callback] 🔀 Mengarahkan user ke: ${targetPath}`);
+
     router.replace({
-      pathname: "/register",
+      pathname: targetPath,
       params: { verified: "true", email },
     });
   };
@@ -110,7 +133,7 @@ export default function AuthCallback() {
 
       const parsePairs = (str: string) => {
         if (!str) return;
-        str.split("&").forEach(pair => {
+        str.split("&").forEach((pair) => {
           const idx = pair.indexOf("=");
           if (idx > -1) {
             const key = decodeURIComponent(pair.substring(0, idx));

@@ -92,27 +92,32 @@ export default function Login() {
       Alert.alert("Login Gagal", "Email dan password wajib diisi.");
       return;
     }
- 
+
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .rpc("verify_user_login", { p_email: email.trim(), p_password: password });
- 
+      const { data, error } = await supabase.rpc("verify_user_login", {
+        p_email: email.trim(),
+        p_password: password,
+      });
+
       if (error || !data || data.length === 0) {
         Alert.alert("Login Gagal", "Email atau password salah.");
         return;
       }
- 
+
       const user = data[0];
 
-      await AsyncStorage.setItem("current_user", JSON.stringify({
-        id: user.id,
-        name: user.name,
-        nim: user.nim,
-        email: user.email,
-        role: user.role,
-      }));
- 
+      await AsyncStorage.setItem(
+        "current_user",
+        JSON.stringify({
+          id: user.id,
+          name: user.name,
+          nim: user.nim,
+          email: user.email,
+          role: user.role,
+        }),
+      );
+
       if (user.role === "admin") {
         router.replace("/admin");
       } else {
@@ -142,11 +147,11 @@ export default function Login() {
           <View style={styles.logoSection}>
             <PixelLogo />
           </View>
- 
+
           {/* Form area */}
           <View style={styles.formSection}>
             <Text style={styles.welcomeText}>Welcome</Text>
- 
+
             {/* Email */}
             <View style={styles.inputWrap}>
               <TextInput
@@ -159,7 +164,7 @@ export default function Login() {
                 onChangeText={setEmail}
               />
             </View>
- 
+
             {/* Password */}
             <View style={styles.inputWrapPass}>
               <TextInput
@@ -183,16 +188,15 @@ export default function Login() {
               </TouchableOpacity>
             </View>
 
-            
-              {/* Forgot Password Link */}
-            <TouchableOpacity 
-              onPress={() => router.push("/")} 
+            {/* Forgot Password Link */}
+            <TouchableOpacity
+              onPress={() => router.push("/forgot-password")}
               style={styles.forgotBtn}
               activeOpacity={0.7}
             >
               <Text style={styles.forgotText}>Forgot Password?</Text>
             </TouchableOpacity>
- 
+
             {/* Login button */}
             <TouchableOpacity
               style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
@@ -210,7 +214,10 @@ export default function Login() {
             {/* Register Link Footer */}
             <View style={styles.registerRow}>
               <Text style={styles.noAccountText}>Tidak punya akun? </Text>
-              <TouchableOpacity onPress={() => router.push("/register")} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={() => router.push("/register")}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.registerLink}>Registrasi disini</Text>
               </TouchableOpacity>
             </View>
