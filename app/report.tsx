@@ -4,7 +4,7 @@ import { decode } from "base64-arraybuffer";
 import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Dimensions,
@@ -25,6 +25,11 @@ import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
 
+// ── NOTIFIKASI IMPORTS ──
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+
 export default function Report() {
   const [reportType, setReportType] = useState<"lost" | "found">("lost");
   const [itemName, setItemName] = useState("");
@@ -37,18 +42,17 @@ export default function Report() {
   const [floor, setFloor] = useState("");
   const [isFloorModalVisible, setFloorModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isImageOptionsModalVisible, setIsImageOptionsModalVisible] =
-    useState(false);
+  const [isImageOptionsModalVisible, setIsImageOptionsModalVisible] = useState(false);
 
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
-  const [mapCoordinate, setMapCoordinate] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const [mapCoordinate, setMapCoordinate] = useState<{ x: number; y: number } | null>(null);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [isMinimized, setIsMinimized] = useState(false);
 
   const { currentTheme } = useAppContext();
+
+  // ── NOTIFIKASI STATE ──
+  const [expoPushToken, setExpoPushToken] = useState("");
 
   const categories = [
     "Elektronik",
@@ -59,23 +63,62 @@ export default function Report() {
   ];
   const buildings = ["Gedung A", "Gedung B", "Gedung C", "Gedung D"];
 
+  // ── NOTIFIKASI LOGIC: Ambil Token Perangkat ──
+  const registerForPushNotificationsAsync = async () => {
+    let token;
+    
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("laporan-ufound", {
+        name: "Notifikasi Laporan",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 300, 200, 300],
+        enableVibrate: true,
+        lightColor: "#5856D6",
+        sound: "default",
+      });
+    }
+
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== "granted") {
+        console.log("Izin push notification ditolak user!");
+        return;
+      }
+
+      try {
+        const projectId =
+          Constants.expoConfig?.extra?.eas?.projectId ??
+          Constants.easConfig?.projectId ??
+          "Y0a0ad3e3-cf3a-4101-95af-02ffa62b0d72";
+
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        setExpoPushToken(token);
+      } catch (error) {
+        console.log("Gagal mengambil token (Masa Testing / Tanpa Login Expo):", error);
+      }
+    }
+    return token;
+  };
+
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+  }, []);
+
   const getDynamicFloors = (selectedBuilding: string) => {
     let maxFloors = 0;
     switch (selectedBuilding) {
-      case "Gedung A":
-        maxFloors = 9;
-        break;
-      case "Gedung B":
-        maxFloors = 6;
-        break;
-      case "Gedung C":
-        maxFloors = 12;
-        break;
-      case "Gedung D":
-        maxFloors = 23;
-        break;
-      default:
-        return [];
+      case "Gedung A": maxFloors = 9; break;
+      case "Gedung B": maxFloors = 6; break;
+      case "Gedung C": maxFloors = 12; break;
+      case "Gedung D": maxFloors = 23; break;
+      default: return [];
     }
     const availableFloors = [];
     for (let i = 1; i <= maxFloors; i++) {
@@ -108,17 +151,12 @@ export default function Report() {
       if (Platform.OS === "web") {
         window.alert("Izin kamera ditolak.");
       } else {
-        Alert.alert(
-          "Izin Ditolak",
-          "Akses kamera dibutuhkan untuk mengambil foto.",
-        );
+        Alert.alert("Izin Ditolak", "Akses kamera dibutuhkan untuk mengambil foto.");
       }
       return;
     }
 
-    let result = await ImagePicker.launchCameraAsync({
-      quality: 0.8,
-    });
+    let result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
 
     if (!result.canceled) {
       setImages((prev) => [...prev, result.assets[0].uri].slice(0, 3));
@@ -160,14 +198,11 @@ export default function Report() {
   };
 
   const generateUUID = () => {
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-      /[xy]/g,
-      function (c) {
-        const r = (Math.random() * 16) | 0,
-          v = c === "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      },
-    );
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0,
+        v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   };
 
   const handleSubmit = async () => {
@@ -183,13 +218,12 @@ export default function Report() {
     setIsLoading(true);
 
     try {
-      // 1. Ambil ID user yang sedang login dari memori lokal
       const rawUser = await AsyncStorage.getItem("current_user");
       let currentUserId = null;
       if (rawUser) {
         try {
           const parsedUser = JSON.parse(rawUser);
-          currentUserId = parsedUser.id; // KUNCI UTAMA: Ambil ID-nya
+          currentUserId = parsedUser.id;
         } catch (e) {
           console.error("Gagal parse data user", e);
         }
@@ -220,19 +254,18 @@ export default function Report() {
             .from("item-images")
             .upload(fileName, fileData, { contentType: mimeType });
           if (error) throw new Error(`Gagal unggah foto: ${error.message}`);
-          return supabase.storage.from("item-images").getPublicUrl(fileName)
-            .data.publicUrl;
+          return supabase.storage.from("item-images").getPublicUrl(fileName).data.publicUrl;
         });
 
         const uploadedUrls = await Promise.all(uploadPromises);
         finalImageUrlData = JSON.stringify(uploadedUrls);
       }
 
-      // 2. Tanamkan currentUserId ke dalam database
+      // ── SIMPAN DATA + TOKEN KE SUPABASE ──
       const { error: insertError } = await supabase.from("items").insert([
         {
           id: newItemId,
-          user_id: currentUserId, // SEKARANG DATABASE TAHU SIAPA PEMILIKNYA
+          user_id: currentUserId,
           type: reportType,
           name: itemName,
           category: category,
@@ -243,13 +276,13 @@ export default function Report() {
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
           status: "pending",
+          push_token: expoPushToken || null, 
         },
       ]);
 
       if (insertError)
         throw new Error(`Gagal simpan data: ${insertError.message}`);
 
-      // Fallback local history storage
       if (reportType === "lost") {
         const storedIds = await AsyncStorage.getItem("my_reports");
         let idsArray: string[] = [];
@@ -281,23 +314,12 @@ export default function Report() {
     }
   };
 
-  const DropdownModal = ({
-    visible,
-    data,
-    selectedValue,
-    onSelect,
-    onClose,
-  }: any) => (
+  const DropdownModal = ({ visible, data, selectedValue, onSelect, onClose }: any) => (
     <Modal visible={visible} transparent={true} animationType="fade">
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback>
-            <View
-              style={[
-                styles.modalContent,
-                { backgroundColor: currentTheme.cardBackground },
-              ]}
-            >
+            <View style={[styles.modalContent, { backgroundColor: currentTheme.cardBackground }]}>
               <ScrollView showsVerticalScrollIndicator={false}>
                 {data.map((item: string, index: number) => (
                   <TouchableOpacity
@@ -305,9 +327,7 @@ export default function Report() {
                     style={[
                       styles.dropdownItem,
                       { borderBottomColor: currentTheme.border },
-                      selectedValue === item && {
-                        backgroundColor: currentTheme.chipActive,
-                      },
+                      selectedValue === item && { backgroundColor: currentTheme.chipActive },
                       index === data.length - 1 && styles.dropdownItemLast,
                     ]}
                     onPress={() => onSelect(item)}
@@ -316,20 +336,13 @@ export default function Report() {
                       style={[
                         styles.dropdownItemText,
                         { color: currentTheme.textMain },
-                        selectedValue === item && {
-                          color: Colors.primary,
-                          fontWeight: "bold",
-                        },
+                        selectedValue === item && { color: Colors.primary, fontWeight: "bold" },
                       ]}
                     >
                       {item}
                     </Text>
                     {selectedValue === item && (
-                      <Ionicons
-                        name="checkmark"
-                        size={18}
-                        color={Colors.primary}
-                      />
+                      <Ionicons name="checkmark" size={18} color={Colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -346,9 +359,7 @@ export default function Report() {
   const minHeight = screenWidth * (900 / 1250);
 
   return (
-    <View
-      style={[styles.safeArea, { backgroundColor: currentTheme.background }]}
-    >
+    <View style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -360,70 +371,29 @@ export default function Report() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View
-            style={[
-              styles.toggleContainer,
-              {
-                backgroundColor: currentTheme.cardBackground,
-                borderColor: currentTheme.border,
-              },
-            ]}
-          >
+          <View style={[styles.toggleContainer, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
             <TouchableOpacity
-              style={[
-                styles.toggleBtn,
-                reportType === "lost" && styles.toggleBtnActive,
-              ]}
-              onPress={() => {
-                setReportType("lost");
-                setImages([]);
-              }}
+              style={[styles.toggleBtn, reportType === "lost" && styles.toggleBtnActive]}
+              onPress={() => { setReportType("lost"); setImages([]); }}
             >
-              <Text
-                style={[
-                  styles.toggleText,
-                  { color: currentTheme.textSecondary },
-                  reportType === "lost" && styles.toggleTextActive,
-                ]}
-              >
+              <Text style={[styles.toggleText, { color: currentTheme.textSecondary }, reportType === "lost" && styles.toggleTextActive]}>
                 I Lost an Item
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.toggleBtn,
-                reportType === "found" && styles.toggleBtnActive,
-              ]}
-              onPress={() => {
-                setReportType("found");
-                setImages([]);
-              }}
+              style={[styles.toggleBtn, reportType === "found" && styles.toggleBtnActive]}
+              onPress={() => { setReportType("found"); setImages([]); }}
             >
-              <Text
-                style={[
-                  styles.toggleText,
-                  { color: currentTheme.textSecondary },
-                  reportType === "found" && styles.toggleTextActive,
-                ]}
-              >
+              <Text style={[styles.toggleText, { color: currentTheme.textSecondary }, reportType === "found" && styles.toggleTextActive]}>
                 I Found an Item
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: currentTheme.textMain }]}>
-              Nama Barang
-            </Text>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Nama Barang</Text>
             <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: currentTheme.cardBackground,
-                  borderColor: currentTheme.border,
-                  color: currentTheme.textMain,
-                },
-              ]}
+              style={[styles.input, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.textMain }]}
               placeholder="Contoh: Kunci Motor, Dompet Hitam"
               placeholderTextColor={currentTheme.textSecondary}
               value={itemName}
@@ -432,181 +402,68 @@ export default function Report() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: currentTheme.textMain }]}>
-              Kategori
-            </Text>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Kategori</Text>
             <TouchableOpacity
-              style={[
-                styles.dropdownSelector,
-                {
-                  backgroundColor: currentTheme.cardBackground,
-                  borderColor: currentTheme.border,
-                },
-              ]}
+              style={[styles.dropdownSelector, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
               onPress={() => setCategoryModalVisible(true)}
             >
-              <Text
-                style={[
-                  styles.dropdownText,
-                  {
-                    color: category
-                      ? currentTheme.textMain
-                      : currentTheme.textSecondary,
-                  },
-                ]}
-              >
+              <Text style={[styles.dropdownText, { color: category ? currentTheme.textMain : currentTheme.textSecondary }]}>
                 {category || "Pilih Kategori..."}
               </Text>
-              <Ionicons
-                name="chevron-down"
-                size={20}
-                color={currentTheme.textSecondary}
-              />
+              <Ionicons name="chevron-down" size={20} color={currentTheme.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: currentTheme.textMain }]}>
-              Lokasi Terakhir / Ditemukan
-            </Text>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Lokasi Terakhir / Ditemukan</Text>
             <View style={styles.locationRow}>
               <View style={{ flex: 1, marginRight: 5 }}>
                 <TouchableOpacity
-                  style={[
-                    styles.dropdownSelector,
-                    {
-                      backgroundColor: currentTheme.cardBackground,
-                      borderColor: currentTheme.border,
-                    },
-                  ]}
+                  style={[styles.dropdownSelector, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
                   onPress={() => setBuildingModalVisible(true)}
                 >
-                  <Text
-                    style={[
-                      styles.dropdownText,
-                      {
-                        color: building
-                          ? currentTheme.textMain
-                          : currentTheme.textSecondary,
-                      },
-                    ]}
-                  >
+                  <Text style={[styles.dropdownText, { color: building ? currentTheme.textMain : currentTheme.textSecondary }]}>
                     {building || "Gedung..."}
                   </Text>
-                  <Ionicons
-                    name="chevron-down"
-                    size={20}
-                    color={currentTheme.textSecondary}
-                  />
+                  <Ionicons name="chevron-down" size={20} color={currentTheme.textSecondary} />
                 </TouchableOpacity>
               </View>
               <View style={{ flex: 1, marginLeft: 5 }}>
                 <TouchableOpacity
-                  style={[
-                    styles.dropdownSelector,
-                    {
-                      backgroundColor: currentTheme.cardBackground,
-                      borderColor: currentTheme.border,
-                      opacity: building ? 1 : 0.5,
-                    },
-                  ]}
+                  style={[styles.dropdownSelector, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, opacity: building ? 1 : 0.5 }]}
                   disabled={!building}
-                  onPress={() => {
-                    setFloorModalVisible(true);
-                    setMapCoordinate(null);
-                  }}
+                  onPress={() => { setFloorModalVisible(true); setMapCoordinate(null); }}
                 >
-                  <Text
-                    style={[
-                      styles.dropdownText,
-                      {
-                        color: floor
-                          ? currentTheme.textMain
-                          : currentTheme.textSecondary,
-                      },
-                    ]}
-                  >
+                  <Text style={[styles.dropdownText, { color: floor ? currentTheme.textMain : currentTheme.textSecondary }]}>
                     {floor || "Lantai..."}
                   </Text>
-                  <Ionicons
-                    name="chevron-down"
-                    size={20}
-                    color={currentTheme.textSecondary}
-                  />
+                  <Ionicons name="chevron-down" size={20} color={currentTheme.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
 
             <TouchableOpacity
-              style={[
-                styles.mapButtonFull,
-                {
-                  backgroundColor: currentTheme.cardBackground,
-                  opacity: building && floor ? 1 : 0.6,
-                  borderColor: currentTheme.border,
-                },
-              ]}
+              style={[styles.mapButtonFull, { backgroundColor: currentTheme.cardBackground, opacity: building && floor ? 1 : 0.6, borderColor: currentTheme.border }]}
               disabled={!building || !floor}
               onPress={() => setIsMapModalVisible(true)}
             >
-              <Ionicons
-                name="map-outline"
-                size={20}
-                color={
-                  building && floor
-                    ? Colors.primary
-                    : currentTheme.textSecondary
-                }
-                style={{ marginRight: 10 }}
-              />
-              <Text
-                style={[
-                  styles.mapButtonText,
-                  {
-                    color:
-                      building && floor
-                        ? Colors.primary
-                        : currentTheme.textSecondary,
-                  },
-                ]}
-              >
+              <Ionicons name="map-outline" size={20} color={building && floor ? Colors.primary : currentTheme.textSecondary} style={{ marginRight: 10 }} />
+              <Text style={[styles.mapButtonText, { color: building && floor ? Colors.primary : currentTheme.textSecondary }]}>
                 {mapCoordinate ? "Ubah Titik Lokasi" : "Tandai di Peta"}
               </Text>
               <View style={{ flex: 1 }} />
               {mapCoordinate ? (
-                <Ionicons
-                  name="checkmark-circle"
-                  size={24}
-                  color={Colors.primary}
-                />
+                <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />
               ) : (
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={
-                    building && floor
-                      ? Colors.primary
-                      : currentTheme.textSecondary
-                  }
-                />
+                <Ionicons name="chevron-forward" size={20} color={building && floor ? Colors.primary : currentTheme.textSecondary} />
               )}
             </TouchableOpacity>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: currentTheme.textMain }]}>
-              Deskripsi Tambahan
-            </Text>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Deskripsi Tambahan</Text>
             <TextInput
-              style={[
-                styles.input,
-                styles.textArea,
-                {
-                  backgroundColor: currentTheme.cardBackground,
-                  borderColor: currentTheme.border,
-                  color: currentTheme.textMain,
-                },
-              ]}
+              style={[styles.input, styles.textArea, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.textMain }]}
               placeholder="Ciri-ciri khusus, jam kejadian, dll."
               placeholderTextColor={currentTheme.textSecondary}
               multiline={true}
@@ -618,47 +475,20 @@ export default function Report() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: currentTheme.textMain }]}>
-              Unggah Foto (Maksimal 3)
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.imageScrollContainer}
-            >
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Unggah Foto (Maksimal 3)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageScrollContainer}>
               {images.map((uri, index) => (
                 <View key={index} style={styles.imagePreviewWrapper}>
                   <Image source={{ uri }} style={styles.previewImageMulti} />
-                  <TouchableOpacity
-                    style={styles.removeImageBtn}
-                    onPress={() => removeImage(index)}
-                  >
+                  <TouchableOpacity style={styles.removeImageBtn} onPress={() => removeImage(index)}>
                     <Ionicons name="close-circle" size={24} color="#FF3B30" />
                   </TouchableOpacity>
                 </View>
               ))}
               {images.length < 3 && (
-                <TouchableOpacity
-                  style={[
-                    styles.addMoreImageBtn,
-                    {
-                      backgroundColor: currentTheme.cardBackground,
-                      borderColor: currentTheme.border,
-                    },
-                  ]}
-                  onPress={handleImageUploadPress}
-                >
-                  <Ionicons
-                    name="camera-outline"
-                    size={32}
-                    color={currentTheme.textSecondary}
-                  />
-                  <Text
-                    style={[
-                      styles.uploadText,
-                      { color: currentTheme.textSecondary },
-                    ]}
-                  >
+                <TouchableOpacity style={[styles.addMoreImageBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]} onPress={handleImageUploadPress}>
+                  <Ionicons name="camera-outline" size={32} color={currentTheme.textSecondary} />
+                  <Text style={[styles.uploadText, { color: currentTheme.textSecondary }]}>
                     {images.length === 0 ? "Tambah Foto" : `${images.length}/3`}
                   </Text>
                 </TouchableOpacity>
@@ -666,134 +496,35 @@ export default function Report() {
             </ScrollView>
           </View>
 
-          <TouchableOpacity
-            style={[styles.submitBtn, isLoading && { opacity: 0.7 }]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
+          <TouchableOpacity style={[styles.submitBtn, isLoading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={isLoading}>
             <Text style={styles.submitBtnText}>
               {isLoading ? "Mengirim Data..." : "Submit Laporan"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
 
-        <DropdownModal
-          visible={isCategoryModalVisible}
-          data={categories}
-          selectedValue={category}
-          onSelect={(item: string) => {
-            setCategory(item);
-            setCategoryModalVisible(false);
-          }}
-          onClose={() => setCategoryModalVisible(false)}
-        />
-        <DropdownModal
-          visible={isBuildingModalVisible}
-          data={buildings}
-          selectedValue={building}
-          onSelect={(item: string) => {
-            setBuilding(item);
-            setBuildingModalVisible(false);
-            setFloor("");
-            setMapCoordinate(null);
-          }}
-          onClose={() => setBuildingModalVisible(false)}
-        />
-        <DropdownModal
-          visible={isFloorModalVisible}
-          data={floors}
-          selectedValue={floor}
-          onSelect={(item: string) => {
-            setFloor(item);
-            setFloorModalVisible(false);
-            setMapCoordinate(null);
-          }}
-          onClose={() => setFloorModalVisible(false)}
-        />
+        <DropdownModal visible={isCategoryModalVisible} data={categories} selectedValue={category} onSelect={(item: string) => { setCategory(item); setCategoryModalVisible(false); }} onClose={() => setCategoryModalVisible(false)} />
+        <DropdownModal visible={isBuildingModalVisible} data={buildings} selectedValue={building} onSelect={(item: string) => { setBuilding(item); setBuildingModalVisible(false); setFloor(""); setMapCoordinate(null); }} onClose={() => setBuildingModalVisible(false)} />
+        <DropdownModal visible={isFloorModalVisible} data={floors} selectedValue={floor} onSelect={(item: string) => { setFloor(item); setFloorModalVisible(false); setMapCoordinate(null); }} onClose={() => setFloorModalVisible(false)} />
 
-        <Modal
-          visible={isImageOptionsModalVisible}
-          transparent={true}
-          animationType="slide"
-        >
-          <TouchableOpacity
-            style={styles.modalOverlayActionSheet}
-            activeOpacity={1}
-            onPress={() => setIsImageOptionsModalVisible(false)}
-          >
-            <View
-              style={[
-                styles.actionSheetContent,
-                {
-                  backgroundColor: currentTheme.cardBackground,
-                  borderColor: currentTheme.border,
-                },
-              ]}
-            >
+        <Modal visible={isImageOptionsModalVisible} transparent={true} animationType="slide">
+          <TouchableOpacity style={styles.modalOverlayActionSheet} activeOpacity={1} onPress={() => setIsImageOptionsModalVisible(false)}>
+            <View style={[styles.actionSheetContent, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
               <View style={styles.actionSheetHandle} />
-              <Text
-                style={[
-                  styles.actionSheetTitle,
-                  { color: currentTheme.textMain },
-                ]}
-              >
-                Sumber Foto
-              </Text>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionSheetBtn,
-                  { borderBottomColor: currentTheme.border },
-                ]}
-                onPress={takePhoto}
-              >
-                <View
-                  style={[
-                    styles.actionSheetIconBox,
-                    { backgroundColor: "rgba(88, 86, 214, 0.1)" },
-                  ]}
-                >
+              <Text style={[styles.actionSheetTitle, { color: currentTheme.textMain }]}>Sumber Foto</Text>
+              <TouchableOpacity style={[styles.actionSheetBtn, { borderBottomColor: currentTheme.border }]} onPress={takePhoto}>
+                <View style={[styles.actionSheetIconBox, { backgroundColor: "rgba(88, 86, 214, 0.1)" }]}>
                   <Ionicons name="camera" size={22} color={Colors.primary} />
                 </View>
-                <Text
-                  style={[
-                    styles.actionSheetText,
-                    { color: currentTheme.textMain },
-                  ]}
-                >
-                  Buka Kamera Perangkat
-                </Text>
+                <Text style={[styles.actionSheetText, { color: currentTheme.textMain }]}>Buka Kamera Perangkat</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionSheetBtn,
-                  { borderBottomColor: currentTheme.border },
-                ]}
-                onPress={pickGallery}
-              >
-                <View
-                  style={[
-                    styles.actionSheetIconBox,
-                    { backgroundColor: "rgba(88, 86, 214, 0.1)" },
-                  ]}
-                >
+              <TouchableOpacity style={[styles.actionSheetBtn, { borderBottomColor: currentTheme.border }]} onPress={pickGallery}>
+                <View style={[styles.actionSheetIconBox, { backgroundColor: "rgba(88, 86, 214, 0.1)" }]}>
                   <Ionicons name="images" size={22} color={Colors.primary} />
                 </View>
-                <Text
-                  style={[
-                    styles.actionSheetText,
-                    { color: currentTheme.textMain },
-                  ]}
-                >
-                  Pilih dari Galeri
-                </Text>
+                <Text style={[styles.actionSheetText, { color: currentTheme.textMain }]}>Pilih dari Galeri</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionSheetCancelBtn}
-                onPress={() => setIsImageOptionsModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.actionSheetCancelBtn} onPress={() => setIsImageOptionsModalVisible(false)}>
                 <Text style={styles.actionSheetCancelText}>Batal</Text>
               </TouchableOpacity>
             </View>
@@ -801,120 +532,35 @@ export default function Report() {
         </Modal>
 
         <Modal visible={isMapModalVisible} animationType="slide">
-          <View
-            style={[
-              styles.mapModalContainer,
-              { backgroundColor: currentTheme.background },
-            ]}
-          >
-            <View
-              style={[
-                styles.mapModalHeader,
-                { borderBottomColor: currentTheme.border },
-              ]}
-            >
+          <View style={[styles.mapModalContainer, { backgroundColor: currentTheme.background }]}>
+            <View style={[styles.mapModalHeader, { borderBottomColor: currentTheme.border }]}>
               <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
-                <Ionicons
-                  name="close"
-                  size={28}
-                  color={currentTheme.textMain}
-                />
+                <Ionicons name="close" size={28} color={currentTheme.textMain} />
               </TouchableOpacity>
-              <Text
-                style={[styles.mapModalTitle, { color: currentTheme.textMain }]}
-              >
-                Titik Lokasi
-              </Text>
+              <Text style={[styles.mapModalTitle, { color: currentTheme.textMain }]}>Titik Lokasi</Text>
               <View style={{ width: 28 }} />
             </View>
 
             <View style={styles.mapViewContainer}>
-              <ScrollView
-                horizontal={true}
-                showsHorizontalScrollIndicator={false}
-                bounces={false}
-                contentContainerStyle={{
-                  flexGrow: 1,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  bounces={false}
-                  contentContainerStyle={{
-                    flexGrow: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Pressable
-                    style={[
-                      styles.mapPressableCanvas,
-                      {
-                        width: isMinimized ? minWidth : 1250,
-                        height: isMinimized ? minHeight : 900,
-                      },
-                    ]}
-                    onLayout={(e) =>
-                      setMapSize({
-                        width: e.nativeEvent.layout.width,
-                        height: e.nativeEvent.layout.height,
-                      })
-                    }
-                    onPress={handleMapPress}
-                  >
-                    <Image
-                      source={{ uri: getMapImageUrl() }}
-                      style={styles.mapImage}
-                    />
+              <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
+                <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
+                  <Pressable style={[styles.mapPressableCanvas, { width: isMinimized ? minWidth : 1250, height: isMinimized ? minHeight : 900 }]} onLayout={(e) => setMapSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} onPress={handleMapPress}>
+                    <Image source={{ uri: getMapImageUrl() }} style={styles.mapImage} />
                     {mapCoordinate && (
-                      <View
-                        pointerEvents="none"
-                        style={[
-                          styles.pinContainer,
-                          {
-                            left: `${mapCoordinate.x * 100}%`,
-                            top: `${mapCoordinate.y * 100}%`,
-                            transform: [
-                              { translateX: -24 },
-                              { translateY: -48 },
-                            ],
-                          },
-                        ]}
-                      >
+                      <View pointerEvents="none" style={[styles.pinContainer, { left: `${mapCoordinate.x * 100}%`, top: `${mapCoordinate.y * 100}%`, transform: [{ translateX: -24 }, { translateY: -48 }] }]}>
                         <Ionicons name="location" size={48} color="#FF3B30" />
                       </View>
                     )}
                   </Pressable>
                 </ScrollView>
               </ScrollView>
-              <TouchableOpacity
-                style={styles.floatingToggleBtn}
-                onPress={() => setIsMinimized(!isMinimized)}
-              >
-                <Ionicons
-                  name={isMinimized ? "expand" : "contract"}
-                  size={28}
-                  color="#FFFFFF"
-                />
+              <TouchableOpacity style={styles.floatingToggleBtn} onPress={() => setIsMinimized(!isMinimized)}>
+                <Ionicons name={isMinimized ? "expand" : "contract"} size={28} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
-            <View
-              style={[
-                styles.mapModalFooter,
-                {
-                  borderTopColor: currentTheme.border,
-                  backgroundColor: currentTheme.cardBackground,
-                },
-              ]}
-            >
-              <TouchableOpacity
-                style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]}
-                disabled={!mapCoordinate}
-                onPress={() => setIsMapModalVisible(false)}
-              >
+            <View style={[styles.mapModalFooter, { borderTopColor: currentTheme.border, backgroundColor: currentTheme.cardBackground }]}>
+              <TouchableOpacity style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]} disabled={!mapCoordinate} onPress={() => setIsMapModalVisible(false)}>
                 <Text style={styles.mapSaveBtnText}>Simpan Titik</Text>
               </TouchableOpacity>
             </View>
@@ -937,24 +583,13 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     borderWidth: 1,
   },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderRadius: 6,
-  },
+  toggleBtn: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 6 },
   toggleBtnActive: { backgroundColor: Colors.primary },
   toggleText: { fontSize: 16, fontWeight: "600" },
   toggleTextActive: { color: "#FFFFFF" },
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 14, fontWeight: "bold", marginBottom: 8 },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
+  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16 },
   textArea: { minHeight: 100 },
   dropdownSelector: {
     flexDirection: "row",
@@ -967,18 +602,8 @@ const styles = StyleSheet.create({
     height: 55,
   },
   dropdownText: { fontSize: 16, flex: 1 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    padding: 20,
-  },
-  modalContent: {
-    borderRadius: 12,
-    overflow: "hidden",
-    elevation: 5,
-    maxHeight: "60%",
-  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 20 },
+  modalContent: { borderRadius: 12, overflow: "hidden", elevation: 5, maxHeight: "60%" },
   dropdownItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1009,13 +634,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   previewImageMulti: { width: "100%", height: "100%", resizeMode: "cover" },
-  removeImageBtn: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-  },
+  removeImageBtn: { position: "absolute", top: 4, right: 4, backgroundColor: "#FFFFFF", borderRadius: 12 },
   addMoreImageBtn: {
     width: 120,
     height: 120,
@@ -1025,19 +644,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  uploadText: {
-    marginTop: 10,
-    fontSize: 14,
-    textAlign: "center",
-    paddingHorizontal: 10,
-  },
-  submitBtn: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 10,
-  },
+  uploadText: { marginTop: 10, fontSize: 14, textAlign: "center", paddingHorizontal: 10 },
+  submitBtn: { backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 10 },
   submitBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   mapModalContainer: { flex: 1 },
   mapModalHeader: {
@@ -1049,23 +657,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   mapModalTitle: { fontSize: 18, fontWeight: "bold" },
-  mapViewContainer: {
-    flex: 1,
-    backgroundColor: "#EAEAEA",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
-  },
+  mapViewContainer: { flex: 1, backgroundColor: "#EAEAEA", justifyContent: "center", alignItems: "center", position: "relative" },
   mapPressableCanvas: { position: "relative" },
   mapImage: { width: "100%", height: "100%", resizeMode: "cover" },
   pinContainer: { position: "absolute", zIndex: 10 },
   mapModalFooter: { padding: 20, borderTopWidth: 1 },
-  mapSaveBtn: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: "center",
-  },
+  mapSaveBtn: { backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: 8, alignItems: "center" },
   mapSaveBtnText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   floatingToggleBtn: {
     position: "absolute",
@@ -1076,48 +673,13 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     elevation: 5,
   },
-  modalOverlayActionSheet: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  actionSheetContent: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 25,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-  },
-  actionSheetHandle: {
-    width: 40,
-    height: 5,
-    backgroundColor: "#D1D1D6",
-    borderRadius: 3,
-    alignSelf: "center",
-    marginBottom: 20,
-  },
+  modalOverlayActionSheet: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  actionSheetContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 25, borderWidth: 1, borderBottomWidth: 0 },
+  actionSheetHandle: { width: 40, height: 5, backgroundColor: "#D1D1D6", borderRadius: 3, alignSelf: "center", marginBottom: 20 },
   actionSheetTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 20 },
-  actionSheetBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-  },
-  actionSheetIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 15,
-  },
+  actionSheetBtn: { flexDirection: "row", alignItems: "center", paddingVertical: 15, borderBottomWidth: 1 },
+  actionSheetIconBox: { width: 40, height: 40, borderRadius: 10, justifyContent: "center", alignItems: "center", marginRight: 15 },
   actionSheetText: { fontSize: 16, fontWeight: "500" },
-  actionSheetCancelBtn: {
-    marginTop: 20,
-    backgroundColor: "#FF3B30",
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: "center",
-  },
+  actionSheetCancelBtn: { marginTop: 20, backgroundColor: "#FF3B30", paddingVertical: 15, borderRadius: 12, alignItems: "center" },
   actionSheetCancelText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
 });
