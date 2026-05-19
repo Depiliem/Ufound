@@ -21,6 +21,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
@@ -59,6 +60,7 @@ export default function Report() {
     "Alat Makan",
     "Pakaian",
     "Accesories",
+    "Kunci",
     "Lainnya",
   ];
   const buildings = ["Gedung A", "Gedung B", "Gedung C", "Gedung D"];
@@ -540,41 +542,47 @@ export default function Report() {
           </TouchableOpacity>
         </Modal>
 
-        <Modal visible={isMapModalVisible} animationType="slide">
-          <View style={[styles.mapModalContainer, { backgroundColor: currentTheme.background }]}>
-            <View style={[styles.mapModalHeader, { borderBottomColor: currentTheme.border }]}>
-              <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
-                <Ionicons name="close" size={28} color={currentTheme.textMain} />
-              </TouchableOpacity>
-              <Text style={[styles.mapModalTitle, { color: currentTheme.textMain }]}>Titik Lokasi</Text>
-              <View style={{ width: 28 }} />
-            </View>
+        {/* ── MODAL PETA ── */}
+<Modal visible={isMapModalVisible} animationType="slide">
+  <SafeAreaView style={[styles.mapModalContainer, { backgroundColor: currentTheme.background }]}>
+    
+    {/* Header Modal */}
+    <View style={[styles.mapModalHeader, { borderBottomColor: currentTheme.border }]}>
+      <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
+        <Ionicons name="close" size={28} color={currentTheme.textMain} />
+      </TouchableOpacity>
+      <Text style={[styles.mapModalTitle, { color: currentTheme.textMain }]}>Titik Lokasi</Text>
+      <View style={{ width: 28 }} />
+    </View>
 
-            <View style={styles.mapViewContainer}>
-              <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
-                <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
-                  <Pressable style={[styles.mapPressableCanvas, { width: isMinimized ? minWidth : 1250, height: isMinimized ? minHeight : 900 }]} onLayout={(e) => setMapSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} onPress={handleMapPress}>
-                    <Image source={{ uri: getMapImageUrl() }} style={styles.mapImage} />
-                    {mapCoordinate && (
-                      <View pointerEvents="none" style={[styles.pinContainer, { left: `${mapCoordinate.x * 100}%`, top: `${mapCoordinate.y * 100}%`, transform: [{ translateX: -24 }, { translateY: -48 }] }]}>
-                        <Ionicons name="location" size={48} color="#FF3B30" />
-                      </View>
-                    )}
-                  </Pressable>
-                </ScrollView>
-              </ScrollView>
-              <TouchableOpacity style={styles.floatingToggleBtn} onPress={() => setIsMinimized(!isMinimized)}>
-                <Ionicons name={isMinimized ? "expand" : "contract"} size={28} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+    {/* Area Kanvas Peta */}
+    <View style={styles.mapViewContainer}>
+      <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
+        <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center" }}>
+          <Pressable style={[styles.mapPressableCanvas, { width: isMinimized ? minWidth : 1250, height: isMinimized ? minHeight : 900 }]} onLayout={(e) => setMapSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} onPress={handleMapPress}>
+            <Image source={{ uri: getMapImageUrl() }} style={styles.mapImage} />
+            {mapCoordinate && (
+              <View pointerEvents="none" style={[styles.pinContainer, { left: `${mapCoordinate.x * 100}%`, top: `${mapCoordinate.y * 100}%`, transform: [{ translateX: -24 }, { translateY: -48 }] }]}>
+                <Ionicons name="location" size={48} color="#FF3B30" />
+              </View>
+            )}
+          </Pressable>
+        </ScrollView>
+      </ScrollView>
+      <TouchableOpacity style={styles.floatingToggleBtn} onPress={() => setIsMinimized(!isMinimized)}>
+        <Ionicons name={isMinimized ? "expand" : "contract"} size={28} color="#FFFFFF" />
+      </TouchableOpacity>
+    </View>
 
-            <View style={[styles.mapModalFooter, { borderTopColor: currentTheme.border, backgroundColor: currentTheme.cardBackground }]}>
-              <TouchableOpacity style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]} disabled={!mapCoordinate} onPress={() => setIsMapModalVisible(false)}>
-                <Text style={styles.mapSaveBtnText}>Simpan Titik</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+    {/* Footer Modal */}
+    <View style={[styles.mapModalFooter, { borderTopColor: currentTheme.border, backgroundColor: currentTheme.cardBackground }]}>
+      <TouchableOpacity style={[styles.mapSaveBtn, !mapCoordinate && { opacity: 0.5 }]} disabled={!mapCoordinate} onPress={() => setIsMapModalVisible(false)}>
+        <Text style={styles.mapSaveBtnText}>Simpan Titik</Text>
+      </TouchableOpacity>
+    </View>
+
+  </SafeAreaView>
+</Modal>
       </KeyboardAvoidingView>
     </View>
   );
@@ -684,8 +692,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 20,
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
-    borderBottomWidth: 1,
   },
   mapModalTitle: { fontSize: 18, fontWeight: "bold" },
   mapViewContainer: { flex: 1, backgroundColor: "#EAEAEA", justifyContent: "center", alignItems: "center", position: "relative" },
