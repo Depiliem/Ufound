@@ -27,6 +27,8 @@ const ALLOWED_DOMAINS = [
   "@lecturer.umn.ac.id",
 ];
 
+let _magicLinkSucceeded = false;
+
 // ── Animated wrapper ──────────────────────────────────────────────────────────
 function StepView({
   children,
@@ -76,16 +78,25 @@ export default function ForgotPassword() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const hasProcessedCallback = useRef(false); 
 
   // ── Listener Deep Link dari Callback ─────────────────────────────────────
   useEffect(() => {
     if (!params.verified) return;
+    if (hasProcessedCallback.current) return; // ← guard
+    hasProcessedCallback.current = true;
 
     if (params.verified === "true" && params.email) {
       console.log("[ForgotPass] ✅ Deep Link terverifikasi, masuk form reset.");
+      _magicLinkSucceeded = true; 
       setPending(params.email);
       setStep("reset");
     } else if (params.verified === "error") {
+      if (_magicLinkSucceeded) {
+        console.log("[ForgotPass] ⚠️ verified=error diabaikan — magic link sudah berhasil sebelumnya");
+        router.setParams({ verified: undefined, email: undefined });
+        return;
+      }
       console.log("[ForgotPass] ❌ Verifikasi Deep Link gagal.");
       setErrorMsg(
         "Link verifikasi tidak valid atau sudah kedaluwarsa. Silakan minta link baru.",
