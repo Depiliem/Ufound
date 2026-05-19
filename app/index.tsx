@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react"; // Pastikan useEffect diimport
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -17,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppContext } from "../context/AppContext";
+import { useNfc } from "../hooks/useNfc";
 import { supabase } from "../lib/supabase";
 
 function PixelLogo() {
@@ -86,11 +88,13 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // State baru untuk menahan render layar selama pengecekan sesi cold start berjalan
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // ── PENGECEKAN AUTO-LOGIN SAAT APLIKASI DIBUKA DARI NOL ────────────────────
+  // NFC Login state
+  const [nfcModalVisible, setNfcModalVisible] = useState(false);
+  const [nfcLoginLoading, setNfcLoginLoading] = useState(false);
+  const { status: nfcStatus, error: nfcError, startScan, cancelScan } = useNfc();
+
   useEffect(() => {
     const verifySessionOnStart = async () => {
       try {
@@ -102,18 +106,13 @@ export default function Login() {
           const currentTime = Date.now();
           const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000;
 
-          // Jika ternyata sesi lokal sudah lewat dari 3 hari, hapus total
           if (currentTime - lastActiveTime > THREE_DAYS_IN_MS) {
-            await AsyncStorage.multiRemove([
-              "current_user",
-              "last_active_time",
-            ]);
+            await AsyncStorage.multiRemove(["current_user", "last_active_time"]);
             await supabase.auth.signOut();
             setCheckingAuth(false);
             return;
           }
 
-          // Jika sesi valid, perbarui waktu aktif saat ini dan langsung arahkan rute
           const user = JSON.parse(userString);
           await AsyncStorage.setItem("last_active_time", Date.now().toString());
 
@@ -127,7 +126,6 @@ export default function Login() {
       } catch (err) {
         console.error("Gagal memproses auto login cold start:", err);
       }
-      // Jika tidak ada data user/sesi kosong, buka kunci loading agar form login terlihat
       setCheckingAuth(false);
     };
 
@@ -162,10 +160,8 @@ export default function Login() {
           nim: user.nim,
           email: user.email,
           role: user.role,
-        }),
+        })
       );
-
-      // Set timestamp awal saat berhasil login
       await AsyncStorage.setItem("last_active_time", Date.now().toString());
 
       if (user.role === "admin") {
@@ -180,6 +176,72 @@ export default function Login() {
     }
   };
 
+  // ── NFC Login ────────────────────────────────────────────
+  const handleNfcLogin = async () => {
+    setNfcModalVisible(true);
+    const scannedUid = await startScan();
+
+    if (!scannedUid) {
+      // Error is shown in modal via nfcError/nfcStatus
+      return;
+    }
+
+    setNfcLoginLoading(true);
+
+    try {
+      // Look up user by NFC UID
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, nim, email, role")
+        .eq("nfc_uid", scannedUid)
+        .single();
+
+      if (error || !data) {
+        setNfcModalVisible(false);
+        setNfcLoginLoading(false);
+        Alert.alert(
+          "KTM Tidak Dikenali",
+          "Kartu ini belum didaftarkan ke akun manapun.\n\nLogin manual dulu, lalu daftarkan KTM kamu di halaman Profile."
+        );
+        return;
+      }
+
+      // Save session
+      await AsyncStorage.setItem(
+        "current_user",
+        JSON.stringify({
+          id: data.id,
+          name: data.name,
+          nim: data.nim,
+          email: data.email,
+          role: data.role,
+        })
+      );
+      await AsyncStorage.setItem("last_active_time", Date.now().toString());
+
+      // Brief success state before navigating
+      setTimeout(() => {
+        setNfcModalVisible(false);
+        setNfcLoginLoading(false);
+        if (data.role === "admin") {
+          router.replace("/admin");
+        } else {
+          router.replace("/(tabs)/user");
+        }
+      }, 800);
+    } catch {
+      setNfcModalVisible(false);
+      setNfcLoginLoading(false);
+      Alert.alert("Error", "Terjadi kesalahan. Coba lagi.");
+    }
+  };
+
+  const handleCloseNfcModal = async () => {
+    await cancelScan();
+    setNfcModalVisible(false);
+    setNfcLoginLoading(false);
+  };
+
   const theme = {
     bg: currentTheme.background,
     card: currentTheme.cardBackground,
@@ -189,7 +251,6 @@ export default function Login() {
     primary: "#2B7FE0",
   };
 
-  // Menampilkan layar loading bersih sewaktu sistem membaca AsyncStorage
   if (checkingAuth) {
     return (
       <View
@@ -302,6 +363,21 @@ export default function Login() {
               )}
             </TouchableOpacity>
 
+            {/* ── NFC Login Button ── */}
+            <TouchableOpacity
+              style={[
+                styles.nfcBtn,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={handleNfcLogin}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="card-outline" size={20} color={theme.primary} />
+              <Text style={[styles.nfcBtnText, { color: theme.text }]}>
+                Login dengan KTM
+              </Text>
+            </TouchableOpacity>
+
             <View style={styles.registerRow}>
               <Text style={[styles.noAccountText, { color: theme.subtext }]}>
                 Tidak punya akun?{" "}
@@ -318,6 +394,95 @@ export default function Login() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ── NFC Scan Modal ── */}
+      <Modal
+        visible={nfcModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseNfcModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.nfcIconCircle,
+                {
+                  backgroundColor:
+                    nfcStatus === "success"
+                      ? "rgba(52,199,89,0.12)"
+                      : nfcStatus === "error"
+                      ? "rgba(255,59,48,0.12)"
+                      : "rgba(43,127,224,0.12)",
+                },
+              ]}
+            >
+              <Ionicons
+                name={
+                  nfcStatus === "success"
+                    ? "checkmark-circle"
+                    : nfcStatus === "error"
+                    ? "close-circle"
+                    : "card"
+                }
+                size={52}
+                color={
+                  nfcStatus === "success"
+                    ? "#34C759"
+                    : nfcStatus === "error"
+                    ? "#FF3B30"
+                    : "#2B7FE0"
+                }
+              />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {nfcLoginLoading
+                ? "Memproses..."
+                : nfcStatus === "success"
+                ? "KTM Terdeteksi!"
+                : nfcStatus === "error"
+                ? "Gagal Membaca"
+                : "Tempelkan KTM"}
+            </Text>
+
+            <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
+              {nfcLoginLoading
+                ? "Sedang mencari akun kamu..."
+                : nfcStatus === "success"
+                ? "Berhasil dibaca, memverifikasi akun..."
+                : nfcStatus === "error"
+                ? nfcError ?? "Terjadi kesalahan."
+                : "Dekatkan kartu KTM ke bagian belakang HP kamu"}
+            </Text>
+
+            {(nfcStatus === "scanning" || nfcLoginLoading) && (
+              <ActivityIndicator
+                size="large"
+                color="#2B7FE0"
+                style={{ marginBottom: 24 }}
+              />
+            )}
+
+            {nfcStatus !== "success" && !nfcLoginLoading && (
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: theme.border }]}
+                onPress={handleCloseNfcModal}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cancelBtnText, { color: theme.subtext }]}>
+                  Batal
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -356,11 +521,26 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     alignItems: "center",
     elevation: 2,
+    marginTop: 24,
   },
   loginBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   loginBtnDisabled: { opacity: 0.6 },
-  forgotBtn: { alignItems: "flex-end", marginTop: 8, marginBottom: 24 },
+  forgotBtn: { alignItems: "flex-end", marginTop: 8 },
   forgotText: { fontSize: 12, fontWeight: "600" },
+
+  // NFC Button
+  nfcBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 15,
+    marginTop: 12,
+  },
+  nfcBtnText: { fontSize: 15, fontWeight: "600" },
+
   registerRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -369,4 +549,42 @@ const styles = StyleSheet.create({
   },
   noAccountText: { fontSize: 14 },
   registerLink: { fontSize: 14, fontWeight: "700" },
+
+  // NFC Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    padding: 32,
+    alignItems: "center",
+    paddingBottom: 48,
+  },
+  nfcIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 8 },
+  modalSubtitle: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+    paddingHorizontal: 16,
+  },
+  cancelBtn: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+  },
+  cancelBtnText: { fontSize: 15, fontWeight: "600" },
 });
