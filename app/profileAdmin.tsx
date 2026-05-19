@@ -94,11 +94,12 @@ function StatsModal({
   const fetchStats = async () => {
     try {
       setStatsLoading(true);
+      // UBAH: Baca dari tabel 'item_logs' alih-alih tabel 'items'
       const { data, error } = await supabase
-        .from("items")
+        .from("item_logs")
         .select("building, floor")
-        .eq("type", "found")
-        .eq("status", "approved");
+        .eq("type", "found"); // Anda bisa mengatur filter apa pun di sini
+
       if (error || !data) return;
       setRawData(data as RawStatItem[]);
     } catch {
@@ -176,7 +177,7 @@ function StatsModal({
               <Text
                 style={[statsStyles.title, { color: currentTheme.textMain }]}
               >
-                Statistik Temuan
+                Statistik Barang Hilang
               </Text>
               <Text
                 style={[
@@ -463,7 +464,7 @@ function StatsModal({
                               { backgroundColor: BAR_COLOR },
                             ]}
                           >
-                            <Text style={{ fontSize: 8 }}>👑</Text>
+                            <Text style={{ fontSize: 8 }}></Text>
                           </View>
                         )}
                       </View>
@@ -604,7 +605,7 @@ export default function ProfileAdminScreen() {
     itemId: string,
   ) => {
     const isApproved = statusLaporan === "approved";
-    const title = isApproved ? "Laporan Disetujui! 🎉" : "Laporan Ditolak ⚠️";
+    const title = isApproved ? "Laporan Disetujui! " : "Laporan Ditolak ";
     const body = isApproved
       ? `Laporan mengenai "${itemName}" sudah diverifikasi dan diposting ya!`
       : `Cek lagi laporan "${itemName}" anda, ada data yang kurang sesuai.`;
@@ -1006,7 +1007,9 @@ export default function ProfileAdminScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              <Text style={styles.settingEmoji}>🚪</Text>
+              <Text style={styles.settingEmoji}>
+                <Ionicons name="log-out-outline" size={22} color="#FF3B30" />
+              </Text>
               <View>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>
                   Log Out
