@@ -117,6 +117,17 @@ export default function SSOLogin() {
     setLoading(true);
     setErrorMsg("");
     try {
+      const { data: existing } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", trimmed)
+        .maybeSingle();
+
+      if (existing) {
+        setErrorMsg("Email ini sudah terdaftar. Silakan login.");
+        setLoading(false);
+        return;
+      }
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmed,
         options: {
@@ -206,29 +217,25 @@ export default function SSOLogin() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .insert({
-          email: pendingEmail,
-          name: nama.trim(),
-          nim: isLecturer ? null : nim.trim(),
-          password: password,
-          role: pendingEmail.endsWith("@lecturer.umn.ac.id")
-            ? "lecturer"
-            : "student",
-        })
-        .select("id, name, nim, email, role")
-        .single();
+      const { data, error } = await supabase.rpc("register_user", {
+        p_email: pendingEmail,
+        p_name: nama.trim(),
+        p_nim: isLecturer ? null : nim.trim(),
+        p_password: password,
+        p_role: isLecturer ? "lecturer" : "student",
+      });
       if (error) throw error;
+
+      const user = data[0];
 
       await AsyncStorage.setItem(
         "current_user",
         JSON.stringify({
-          id: data.id,
-          name: data.name,
-          nim: data.nim,
-          email: data.email,
-          role: data.role,
+          id: user.id,
+          name: user.name,
+          nim: user.nim,
+          email: user.email,
+          role: user.role,
         }),
       );
 
@@ -241,7 +248,7 @@ export default function SSOLogin() {
       setLoading(false);
     }
   };
-
+  
   const theme = {
     bg: currentTheme.background,
     card: currentTheme.cardBackground,
