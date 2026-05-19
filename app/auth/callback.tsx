@@ -1,23 +1,33 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useAppContext } from "../../context/AppContext"; // <--- Import context tema
 import { deepLinkStore } from "../../lib/deepLinkStore";
 import { supabase } from "../../lib/supabase";
 
+// ─── Module-level guard ────────────────────────────────────────────────────────
+// useRef TIDAK cukup karena React StrictMode (development/Expo Go) sengaja
+// unmount → remount komponen, sehingga setiap instance punya useRef baru (false).
+// Module-level variable survive siklus unmount→remount tersebut.
+//
+// Reset logic: jika store masih punya URL (deep link baru masuk),
+// guard direset agar magic link berikutnya tetap bisa diproses.
+let _callbackHandled = false;
+
 export default function AuthCallback() {
+  const { currentTheme } = useAppContext(); // <--- Ambil tema saat ini
   const [message, setMessage] = useState("Memverifikasi link…");
-  // Gunakan useRef bukan module-level variable
-  // agar guard terikat ke instance komponen, bukan ke module
-  let _callbackHandled = false;
 
   useEffect(() => {
-    // Guard per-instance, bukan per-module
+    const url = deepLinkStore.get();
+
+    // Jika store masih ada URL → invokasi pertama (atau deep link baru).
+    // Reset guard supaya magic link berikutnya tetap jalan.
+    if (url) _callbackHandled = false;
+
+    // Guard: sudah ditangani dan tidak ada URL baru → StrictMode re-run, skip.
     if (_callbackHandled) return;
     _callbackHandled = true;
-
-    const url = deepLinkStore.get();
-    // Jangan clear dulu sebelum handleDeepLink selesai
-    // Clear hanya setelah URL berhasil dibaca
 
     console.log("[Callback] URL dari store:", url ? url.substring(0, 80) + "…" : null);
 
@@ -27,12 +37,8 @@ export default function AuthCallback() {
       return;
     }
 
-    // Clear SETELAH berhasil dibaca, bukan sebelum diproses
     deepLinkStore.clear();
     handleDeepLink(url);
-
-    // Tidak perlu reset isHandled di cleanup
-    // karena useRef tidak bocor ke instance lain
   }, []);
 
   const handleDeepLink = async (url: string) => {
@@ -43,7 +49,6 @@ export default function AuthCallback() {
       const refresh_token = allParams["refresh_token"];
       const type = allParams["type"];
       const error = allParams["error"];
-      const error_desc = allParams["error_description"];
 
       const errorPath = type === "recovery" ? "/forgot-password" : "/register";
 
@@ -111,15 +116,23 @@ export default function AuthCallback() {
     return result;
   };
 
+  // ─── Tema dinamis ───
+  const theme = {
+    bg: currentTheme.background,
+    text: currentTheme.textSecondary,
+    primary: "#2B7FE0",
+  };
+
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#2B7FE0" />
-      <Text style={styles.text}>{message}</Text>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <ActivityIndicator size="large" color={theme.primary} />
+      <Text style={[styles.text, { color: theme.text }]}>{message}</Text>
     </View>
   );
 }
 
+// Hardcode warna dihapus dari StyleSheet
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#161C2C", alignItems: "center", justifyContent: "center", gap: 16 },
-  text: { color: "#8A9AB8", fontSize: 14 },
+  container: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
+  text: { fontSize: 14 },
 });
