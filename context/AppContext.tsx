@@ -1,4 +1,11 @@
-import React, { createContext, ReactNode, useContext, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { Colors } from "../constants/Colors";
 
 type Theme = {
@@ -20,10 +27,40 @@ interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Key untuk menyimpan data di AsyncStorage
+const THEME_STORAGE_KEY = "app_theme_mode";
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  const toggleTheme = () => setIsDarkMode((prev) => !prev);
+  // 1. Muat preferensi tema saat aplikasi pertama kali dibuka (Cold Start)
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        if (savedTheme !== null) {
+          setIsDarkMode(savedTheme === "dark");
+        }
+      } catch (error) {
+        console.error("Gagal memuat preferensi tema:", error);
+      }
+    };
+
+    loadTheme();
+  }, []);
+
+  // 2. Ubah fungsi toggle agar ikut menyimpan pilihan ke AsyncStorage
+  const toggleTheme = async () => {
+    try {
+      const newMode = !isDarkMode;
+      setIsDarkMode(newMode); // Update tampilan secara instan
+
+      // Simpan pilihan ke storage HP
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, newMode ? "dark" : "light");
+    } catch (error) {
+      console.error("Gagal menyimpan preferensi tema:", error);
+    }
+  };
 
   const currentTheme: Theme = {
     background: isDarkMode ? "#121212" : Colors.background,
