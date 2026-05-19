@@ -285,7 +285,7 @@ export default function Login() {
               activeOpacity={0.7}
             >
               <Text style={[styles.forgotText, { color: theme.subtext }]}>
-                Forgot Password?
+                Lupa Password?
               </Text>
             </TouchableOpacity>
 

@@ -2,6 +2,8 @@
   "expo": {
     "name": "Ufound",
     "slug": "Ufound",
+    "owner": "migos71",
+    "projectId": "7a792651-c78e-490b-9efa-4f714e97b3fe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -37,7 +39,8 @@
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.migos71.Ufound"
+      "package": "com.migos71.Ufound",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",

@@ -440,7 +440,7 @@ export default function SSOLogin() {
                   { num: "1", text: "Buka inbox email UMN kamu" },
                   {
                     num: "2",
-                    text: 'Klik tombol "Verifikasi & masuk" di email dari UFound',
+                    text: 'Klik link "Verifikasi & masuk" yang dikirim ke email dari U-Found',
                   },
                 ].map((s, i) => (
                   <View

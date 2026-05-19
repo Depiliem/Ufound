@@ -163,7 +163,7 @@ export default function ForgotPassword() {
               <View style={[styles.emailChip, { borderColor: theme.primary }]}><Ionicons name="at-outline" size={13} color={theme.primary} style={{ marginRight: 6 }} /><Text style={[styles.emailChipText, { color: theme.primary }]}>{pendingEmail}</Text></View>
               
               <View style={[styles.stepsCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                {[{ num: "1", text: "Buka inbox email student kamu" }, { num: "2", text: "Klik link Reset Password yang dikirim dari sistem" }].map((s, i) => (
+                {[{ num: "1", text: "Buka inbox email UMN kamu (Cek folder spam jika tidak ditemukan)" }, { num: "2", text: 'Klik link "Ganti Password" yang dikirim ke email dari U-Found' }].map((s, i) => (
                   <View key={i} style={[styles.stepRow, i < 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }]}>
                     <View style={[styles.stepNum, { borderColor: theme.primary }]}><Text style={[styles.stepNumText, { color: theme.primary }]}>{s.num}</Text></View>
                     <Text style={[styles.stepText, { color: theme.subtext }]}>{s.text}</Text>
