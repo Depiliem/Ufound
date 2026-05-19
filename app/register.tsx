@@ -59,7 +59,13 @@ function StepView({
 
 export default function SSOLogin() {
   const { currentTheme, isDarkMode } = useAppContext();
-  const params = useLocalSearchParams<{ verified?: string; email?: string }>();
+
+  // Tangkap isNewUser dari routing callback.tsx
+  const params = useLocalSearchParams<{
+    verified?: string;
+    email?: string;
+    isNewUser?: string;
+  }>();
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
@@ -74,37 +80,30 @@ export default function SSOLogin() {
   const [pendingEmail, setPending] = useState("");
   const [isNewUser, setIsNewUser] = useState(false);
 
-  const { verified, email: verifiedEmailParam } = params;
+  const {
+    verified,
+    email: verifiedEmailParam,
+    isNewUser: isNewUserParam,
+  } = params;
+
   useEffect(() => {
     if (!verified) return;
     if (verified === "true" && verifiedEmailParam) {
       setPending(verifiedEmailParam);
-      checkUserExists(verifiedEmailParam);
+
+      // Langsung bypass loading dan eksekusi step selanjutnya berdasarkan data dari callback
+      if (isNewUserParam === "true") {
+        setIsNewUser(true);
+        setStep("new_user");
+      } else {
+        setIsNewUser(false);
+        setStep("verify");
+      }
     } else if (verified === "error") {
       setErrorMsg("Link tidak valid atau sudah kadaluarsa. Minta link baru.");
       setStep("error");
     }
-  }, [verified, verifiedEmailParam]);
-
-  const checkUserExists = async (verifiedEmail: string) => {
-    setStep("loading");
-    try {
-      const { data: user } = await supabase
-        .from("users")
-        .select("id")
-        .eq("email", verifiedEmail.toLowerCase())
-        .maybeSingle();
-      if (user) {
-        setIsNewUser(false);
-        setStep("verify");
-      } else {
-        setIsNewUser(true);
-        setStep("new_user");
-      }
-    } catch (e) {
-      setStep("verify");
-    }
-  };
+  }, [verified, verifiedEmailParam, isNewUserParam]);
 
   const handleSendLink = async () => {
     const trimmed = email.trim().toLowerCase();
