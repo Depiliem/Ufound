@@ -5,6 +5,7 @@ import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -18,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
@@ -33,6 +35,7 @@ type Item = {
   description: string;
   image_url: string | null;
   status: string | null;
+  push_token: string | null;
 };
 
 type CategoryOption = {
@@ -51,7 +54,6 @@ const CATEGORIES: CategoryOption[] = [
   { label: "Lainnya", value: "Lainnya", icon: "cube-outline" },
 ];
 
-// ── Fungsi Helper Parsing Thumbnail ──────────────────────────────────────────
 const getThumbnail = (urlData: string | null) => {
   if (!urlData) return null;
   try {
@@ -63,8 +65,455 @@ const getThumbnail = (urlData: string | null) => {
   }
 };
 
+// ── Statistics Modal Component ────────────────────────────────────────────────
+type RawStatItem = { building: string; floor: string };
+const STAT_BUILDINGS = [
+  "Semua",
+  "Gedung A",
+  "Gedung B",
+  "Gedung C",
+  "Gedung D",
+];
+const BAR_COLOR = Colors.primary;
+
+function StatsModal({
+  visible,
+  onClose,
+  currentTheme,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  currentTheme: any;
+}) {
+  const [rawData, setRawData] = useState<RawStatItem[]>([]);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [filterBuilding, setFilterBuilding] = useState("Semua");
+  const [viewMode, setViewMode] = useState<"floor" | "building">("floor");
+
+  const screenWidth = Dimensions.get("window").width;
+  const TRACK_WIDTH = screenWidth - 40 - 110 - 44 - 24;
+
+  const fetchStats = async () => {
+    try {
+      setStatsLoading(true);
+      const { data, error } = await supabase
+        .from("items")
+        .select("building, floor")
+        .eq("type", "found")
+        .eq("status", "approved");
+      if (error || !data) return;
+      setRawData(data as RawStatItem[]);
+    } catch {
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (visible) fetchStats();
+  }, [visible]);
+
+  const filteredRaw = rawData.filter(
+    (d) => filterBuilding === "Semua" || d.building === filterBuilding,
+  );
+
+  const chartRows = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredRaw.forEach((d) => {
+      if (!d.building || !d.floor) return;
+      const key =
+        viewMode === "floor" ? `${d.building} · ${d.floor}` : d.building;
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.entries(map)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredRaw, viewMode]);
+
+  const totalFiltered = filteredRaw.length;
+  const maxCount = chartRows.length > 0 ? chartRows[0].count : 1;
+
+  const totalAll = rawData.length;
+  const buildingMap: Record<string, number> = {};
+  rawData.forEach((d) => {
+    if (d.building)
+      buildingMap[d.building] = (buildingMap[d.building] || 0) + 1;
+  });
+  const topBuilding =
+    Object.entries(buildingMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
+  const locationMap: Record<string, number> = {};
+  rawData.forEach((d) => {
+    if (d.building && d.floor) {
+      const k = `${d.building} · ${d.floor}`;
+      locationMap[k] = (locationMap[k] || 0) + 1;
+    }
+  });
+  const topLocation =
+    Object.entries(locationMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={statsStyles.overlay}>
+        <SafeAreaView
+          style={[
+            statsStyles.sheet,
+            { backgroundColor: currentTheme.cardBackground },
+          ]}
+          edges={["top", "bottom"]}
+        >
+          <View
+            style={[
+              statsStyles.handle,
+              { backgroundColor: currentTheme.border },
+            ]}
+          />
+
+          {/* Header */}
+          <View style={statsStyles.header}>
+            <View>
+              <Text
+                style={[statsStyles.title, { color: currentTheme.textMain }]}
+              >
+                Statistik Temuan
+              </Text>
+              <Text
+                style={[
+                  statsStyles.subtitle,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
+                Barang ditemukan yang sudah disetujui
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[
+                statsStyles.closeBtn,
+                {
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border,
+                },
+              ]}
+            >
+              <Ionicons name="close" size={18} color={currentTheme.textMain} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Summary cards */}
+          <View style={statsStyles.summaryRow}>
+            <View
+              style={[
+                statsStyles.summaryCard,
+                {
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  statsStyles.summaryNum,
+                  { color: currentTheme.textMain },
+                ]}
+              >
+                {totalAll}
+              </Text>
+              <Text
+                style={[
+                  statsStyles.summaryLabel,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
+                Total{"\n"}Temuan
+              </Text>
+            </View>
+            <View
+              style={[
+                statsStyles.summaryCard,
+                {
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  statsStyles.summaryNum,
+                  { color: currentTheme.textMain },
+                ]}
+                numberOfLines={1}
+              >
+                {topBuilding}
+              </Text>
+              <Text
+                style={[
+                  statsStyles.summaryLabel,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
+                Gedung{"\n"}Terbanyak
+              </Text>
+            </View>
+            <View
+              style={[
+                statsStyles.summaryCard,
+                {
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  statsStyles.summaryNum,
+                  { color: currentTheme.textMain, fontSize: 11 },
+                ]}
+                numberOfLines={2}
+              >
+                {topLocation}
+              </Text>
+              <Text
+                style={[
+                  statsStyles.summaryLabel,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
+                Lokasi{"\n"}Terbanyak
+              </Text>
+            </View>
+          </View>
+
+          {/* Filter: Gedung */}
+          <View style={{ height: 36, marginBottom: 10 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={statsStyles.filterScroll}
+            >
+              {STAT_BUILDINGS.map((b) => {
+                const active = filterBuilding === b;
+                return (
+                  <TouchableOpacity
+                    key={b}
+                    onPress={() => setFilterBuilding(b)}
+                    style={[
+                      statsStyles.filterChip,
+                      {
+                        backgroundColor: active
+                          ? BAR_COLOR
+                          : currentTheme.background,
+                        borderColor: active ? BAR_COLOR : currentTheme.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        statsStyles.filterChipText,
+                        { color: active ? "#fff" : currentTheme.textSecondary },
+                      ]}
+                    >
+                      {b}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Toggle Per Lantai / Per Gedung */}
+          <View
+            style={[
+              statsStyles.toggleRow,
+              {
+                backgroundColor: currentTheme.background,
+                borderColor: currentTheme.border,
+              },
+            ]}
+          >
+            {(["floor", "building"] as const).map((mode) => {
+              const active = viewMode === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  onPress={() => setViewMode(mode)}
+                  style={[
+                    statsStyles.toggleBtn,
+                    active && { backgroundColor: BAR_COLOR },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      statsStyles.toggleBtnText,
+                      { color: active ? "#fff" : currentTheme.textSecondary },
+                    ]}
+                  >
+                    {mode === "floor" ? "Per Lantai" : "Per Gedung"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Chart */}
+          <View
+            style={[statsStyles.chartBox, { borderColor: currentTheme.border }]}
+          >
+            <View style={statsStyles.chartHeaderRow}>
+              <Text
+                style={[
+                  statsStyles.chartHeaderLabel,
+                  { color: currentTheme.textMain },
+                ]}
+              >
+                {viewMode === "floor"
+                  ? filterBuilding === "Semua"
+                    ? "Semua Gedung & Lantai"
+                    : filterBuilding
+                  : "Perbandingan Gedung"}
+              </Text>
+              {totalFiltered > 0 && (
+                <Text
+                  style={[
+                    statsStyles.chartHeaderCount,
+                    { color: currentTheme.textSecondary },
+                  ]}
+                >
+                  {totalFiltered} item
+                </Text>
+              )}
+            </View>
+
+            {statsLoading ? (
+              <View style={styles.centerContent}>
+                <ActivityIndicator size="large" color={BAR_COLOR} />
+              </View>
+            ) : chartRows.length === 0 ? (
+              <View style={statsStyles.empty}>
+                <Ionicons
+                  name="bar-chart-outline"
+                  size={44}
+                  color={currentTheme.textSecondary}
+                />
+                <Text
+                  style={[
+                    statsStyles.emptyText,
+                    { color: currentTheme.textSecondary },
+                  ]}
+                >
+                  Belum ada data untuk filter ini
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1 }}
+              >
+                {chartRows.map((row, idx) => {
+                  const pct =
+                    totalFiltered > 0
+                      ? Math.round((row.count / totalFiltered) * 100)
+                      : 0;
+                  const fillW = Math.max(
+                    4,
+                    (row.count / maxCount) * TRACK_WIDTH,
+                  );
+                  const isFirst = idx === 0;
+                  return (
+                    <View key={row.label} style={statsStyles.barRow}>
+                      <View style={statsStyles.barLabelCol}>
+                        <Text
+                          style={[
+                            statsStyles.barLabel,
+                            { color: currentTheme.textMain },
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {row.label}
+                        </Text>
+                        <Text
+                          style={[
+                            statsStyles.barPct,
+                            { color: currentTheme.textSecondary },
+                          ]}
+                        >
+                          {pct}%
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          statsStyles.barTrack,
+                          { backgroundColor: currentTheme.background },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            statsStyles.barFill,
+                            {
+                              width: fillW,
+                              backgroundColor: isFirst
+                                ? BAR_COLOR
+                                : BAR_COLOR + "99",
+                            },
+                          ]}
+                        />
+                        {isFirst && (
+                          <View
+                            style={[
+                              statsStyles.crownDot,
+                              { backgroundColor: BAR_COLOR },
+                            ]}
+                          >
+                            <Text style={{ fontSize: 8 }}>👑</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View
+                        style={[
+                          statsStyles.countCol,
+                          {
+                            borderColor: isFirst
+                              ? BAR_COLOR + "60"
+                              : currentTheme.border,
+                            backgroundColor: isFirst
+                              ? BAR_COLOR + "15"
+                              : currentTheme.background,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            statsStyles.countText,
+                            {
+                              color: isFirst
+                                ? BAR_COLOR
+                                : currentTheme.textMain,
+                            },
+                          ]}
+                        >
+                          {row.count}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+                <View style={{ height: 16 }} />
+              </ScrollView>
+            )}
+          </View>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
+// ── Main Admin Panel Component ───────────────────────────────────────────────
 export default function AdminPanel() {
-  // ── Main view state (approved items, sama seperti Home) ──────────────────
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,12 +522,14 @@ export default function AdminPanel() {
   const [selectedBuilding, setSelectedBuilding] = useState("Semua");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  // ── Moderation modal state ───────────────────────────────────────────────
   const [isModerationVisible, setIsModerationVisible] = useState(false);
   const [pendingItems, setPendingItems] = useState<Item[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [pendingTab, setPendingTab] = useState<"lost" | "found">("lost");
   const [pendingCount, setPendingCount] = useState(0);
+
+  // State untuk visibilitas modal statistik
+  const [isStatsVisible, setIsStatsVisible] = useState(false);
 
   const { currentTheme, isDarkMode } = useAppContext();
 
@@ -90,30 +541,28 @@ export default function AdminPanel() {
     "Gedung D",
   ];
 
-  // ── Role guard ────────────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
       const checkRole = async () => {
         try {
           const raw = await AsyncStorage.getItem("current_user");
           if (!raw) {
-            router.replace("/(tabs)");
+            router.replace("/");
             return;
           }
           const user = JSON.parse(raw);
           if (user.role !== "admin") {
-            router.replace("/(tabs)");
+            router.replace("/");
             return;
           }
         } catch {
-          router.replace("/(tabs)");
+          router.replace("/");
         }
       };
       checkRole();
     }, []),
   );
 
-  // ── Fetch approved items (main view) ──────────────────────────────────────
   const fetchApprovedItems = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -132,7 +581,6 @@ export default function AdminPanel() {
     }
   }, [activeTab]);
 
-  // ── Fetch pending count (badge) ───────────────────────────────────────────
   const fetchPendingCount = useCallback(async () => {
     try {
       const { count } = await supabase
@@ -157,7 +605,6 @@ export default function AdminPanel() {
     fetchPendingCount();
   };
 
-  // ── Fetch pending items for modal ─────────────────────────────────────────
   const fetchPendingItems = useCallback(async () => {
     try {
       setPendingLoading(true);
@@ -181,16 +628,61 @@ export default function AdminPanel() {
     fetchPendingItems();
   };
 
-  useFocusEffect(useCallback(() => {}, []));
+  const sendPushNotification = async (
+    expoPushToken: string,
+    statusLaporan: string,
+    itemName: string,
+    itemId: string,
+  ) => {
+    const isApproved = statusLaporan === "approved";
+    const title = isApproved ? "Laporan Disetujui! 🎉" : "Laporan Ditolak ⚠️";
+    const body = isApproved
+      ? `Laporan mengenai "${itemName}" sudah diverifikasi dan diposting ya!`
+      : `Cek lagi laporan "${itemName}" anda, ada data yang kurang sesuai.`;
 
-  // ── Moderation actions ────────────────────────────────────────────────────
+    const message = {
+      to: expoPushToken,
+      sound: "default",
+      title,
+      body,
+      data: { url: `/detail/${itemId}` },
+      channelId: "laporan-ufound",
+    };
+
+    try {
+      await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Accept-encoding": "gzip, deflate",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(message),
+      });
+    } catch (error) {
+      console.error("Gagal mengirim push notification via API Expo:", error);
+    }
+  };
+
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
+      const targetItem = pendingItems.find((i) => i.id === id);
+
       const { error } = await supabase
         .from("items")
         .update({ status: newStatus })
         .eq("id", id);
       if (error) throw error;
+
+      if (targetItem && targetItem.push_token) {
+        await sendPushNotification(
+          targetItem.push_token,
+          newStatus,
+          targetItem.name,
+          id,
+        );
+      }
+
       fetchPendingItems();
       fetchPendingCount();
       fetchApprovedItems();
@@ -240,7 +732,6 @@ export default function AdminPanel() {
     setSearchQuery("");
   };
 
-  // ── Filtered main list ────────────────────────────────────────────────────
   const filteredItems = items.filter((item) => {
     const matchSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -253,10 +744,8 @@ export default function AdminPanel() {
     return matchSearch && matchBuilding && matchCategory;
   });
 
-  // ── Render: main grid card (sama seperti Home) ────────────────────────────
   const renderMainCard = ({ item }: { item: Item }) => {
     const thumbnailUri = getThumbnail(item.image_url);
-
     return (
       <TouchableOpacity
         style={[
@@ -301,7 +790,6 @@ export default function AdminPanel() {
             </Text>
           </View>
         </View>
-
         <View style={styles.cardContent}>
           <Text
             style={[styles.itemName, { color: currentTheme.textMain }]}
@@ -341,10 +829,8 @@ export default function AdminPanel() {
     );
   };
 
-  // ── Render: pending card inside moderation modal ──────────────────────────
   const renderPendingCard = ({ item }: { item: Item }) => {
     const thumbnailUri = getThumbnail(item.image_url);
-
     return (
       <View
         style={[
@@ -403,7 +889,6 @@ export default function AdminPanel() {
             </Text>
           </View>
         </TouchableOpacity>
-
         <View
           style={[
             styles.pendingActionRow,
@@ -433,7 +918,6 @@ export default function AdminPanel() {
     );
   };
 
-  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <StatusBar
@@ -446,13 +930,20 @@ export default function AdminPanel() {
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>LOST N FOUND</Text>
           <View style={styles.headerIcons}>
+            {/* Tombol Statistik Laporan */}
+            <TouchableOpacity
+              onPress={() => setIsStatsVisible(true)}
+              style={styles.iconButton}
+            >
+              <Ionicons name="bar-chart-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+
             <TouchableOpacity
               onPress={() => router.push("/history")}
               style={styles.iconButton}
             >
               <Ionicons name="time" size={22} color="#FFFFFF" />
             </TouchableOpacity>
-
             <TouchableOpacity
               onPress={openModeration}
               style={styles.iconButton}
@@ -694,16 +1185,18 @@ export default function AdminPanel() {
         )}
       </View>
 
+      {/* Moderation Modal */}
       <Modal
         visible={isModerationVisible}
         animationType="slide"
         onRequestClose={() => setIsModerationVisible(false)}
       >
-        <View
+        <SafeAreaView
           style={[
             styles.modalContainer,
             { backgroundColor: currentTheme.background },
           ]}
+          edges={["top", "bottom"]}
         >
           <View
             style={[
@@ -720,7 +1213,6 @@ export default function AdminPanel() {
             <Text style={styles.modalTitle}>Moderasi Laporan</Text>
             <View style={{ width: 26 }} />
           </View>
-
           <View
             style={[
               styles.tabContainer,
@@ -733,9 +1225,7 @@ export default function AdminPanel() {
                 { borderBottomColor: currentTheme.border },
                 pendingTab === "lost" && { borderBottomColor: Colors.primary },
               ]}
-              onPress={() => {
-                setPendingTab("lost");
-              }}
+              onPress={() => setPendingTab("lost")}
             >
               <Text
                 style={[
@@ -753,9 +1243,7 @@ export default function AdminPanel() {
                 { borderBottomColor: currentTheme.border },
                 pendingTab === "found" && { borderBottomColor: Colors.primary },
               ]}
-              onPress={() => {
-                setPendingTab("found");
-              }}
+              onPress={() => setPendingTab("found")}
             >
               <Text
                 style={[
@@ -768,7 +1256,6 @@ export default function AdminPanel() {
               </Text>
             </TouchableOpacity>
           </View>
-
           <PendingList
             pendingTab={pendingTab}
             currentTheme={currentTheme}
@@ -777,8 +1264,15 @@ export default function AdminPanel() {
             pendingItems={pendingItems}
             fetchPendingItems={fetchPendingItems}
           />
-        </View>
+        </SafeAreaView>
       </Modal>
+
+      {/* Statistics Modal */}
+      <StatsModal
+        visible={isStatsVisible}
+        onClose={() => setIsStatsVisible(false)}
+        currentTheme={currentTheme}
+      />
 
       <View
         style={[
@@ -795,7 +1289,6 @@ export default function AdminPanel() {
             Home
           </Text>
         </View>
-
         <TouchableOpacity
           style={styles.tabBarFabWrap}
           onPress={() => router.push("/report")}
@@ -812,10 +1305,9 @@ export default function AdminPanel() {
             <Ionicons name="add" size={32} color={Colors.primary} />
           </View>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.tabBarItem}
-          onPress={() => router.push("/(tabs)/profile")}
+          onPress={() => router.push("/profileAdmin")}
         >
           <Ionicons
             name="person-outline"
@@ -833,7 +1325,6 @@ export default function AdminPanel() {
   );
 }
 
-// ── Sub-component to handle pendingTab change effect ─────────────────────────
 function PendingList({
   pendingTab,
   currentTheme,
@@ -841,27 +1332,17 @@ function PendingList({
   pendingLoading,
   pendingItems,
   fetchPendingItems,
-}: {
-  pendingTab: "lost" | "found";
-  currentTheme: any;
-  renderPendingCard: any;
-  pendingLoading: boolean;
-  pendingItems: Item[];
-  fetchPendingItems: () => void;
-}) {
+}: any) {
   React.useEffect(() => {
     fetchPendingItems();
   }, [pendingTab]);
-
-  if (pendingLoading) {
+  if (pendingLoading)
     return (
       <View style={styles.centerContent}>
         <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
-  }
-
-  if (pendingItems.length === 0) {
+  if (pendingItems.length === 0)
     return (
       <View style={styles.centerContent}>
         <Ionicons
@@ -877,8 +1358,6 @@ function PendingList({
         </Text>
       </View>
     );
-  }
-
   return (
     <FlatList
       data={pendingItems}
@@ -890,11 +1369,8 @@ function PendingList({
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  // Header
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -911,8 +1387,6 @@ const styles = StyleSheet.create({
   },
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
-
-  // Badge
   badge: {
     position: "absolute",
     top: -6,
@@ -926,8 +1400,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "bold" },
-
-  // Tabs
   tabContainer: { flexDirection: "row", paddingHorizontal: 20 },
   tabButton: {
     flex: 1,
@@ -936,8 +1408,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
   },
   tabText: { fontSize: 14, fontWeight: "600" },
-
-  // Search
   searchSection: { paddingHorizontal: 20, paddingTop: 12, marginBottom: 10 },
   searchBar: {
     flexDirection: "row",
@@ -949,8 +1419,6 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14 },
   searchIcon: { marginLeft: 10 },
-
-  // Category
   categorySection: {
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -976,8 +1444,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   categoryChipText: { fontSize: 12, fontWeight: "500" },
-
-  // Building filter
   filterSection: { marginTop: 10, marginBottom: 4 },
   filterScroll: { paddingHorizontal: 20 },
   filterChip: {
@@ -988,16 +1454,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterChipText: { fontSize: 12, fontWeight: "500" },
-
-  // Results
   resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
   resultsCount: { fontSize: 12 },
-
-  // Grid list
   listContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
   columnWrapper: { gap: 10, marginBottom: 10 },
-
-  // Main grid card
   card: { flex: 1, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
   imageWrapper: { position: "relative" },
   cardImage: { width: "100%", height: 120, resizeMode: "cover" },
@@ -1045,8 +1505,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "transparent",
   },
-
-  // Empty / center
   centerContent: {
     flex: 1,
     justifyContent: "center",
@@ -1060,8 +1518,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
-
-  // Moderation modal
   modalContainer: { flex: 1 },
   modalHeader: {
     flexDirection: "row",
@@ -1069,12 +1525,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 14,
-    paddingTop: Platform.OS === "ios" ? 54 : 14,
     borderBottomWidth: 1,
   },
   modalTitle: { fontSize: 17, fontWeight: "700", color: "#FFFFFF" },
-
-  // Pending card (inside modal, horizontal layout)
   pendingListContainer: { padding: 16, paddingBottom: 60 },
   pendingCard: {
     borderRadius: 12,
@@ -1095,10 +1548,7 @@ const styles = StyleSheet.create({
   pendingItemName: { fontSize: 15, fontWeight: "700", marginBottom: 4 },
   pendingMeta: { fontSize: 12, marginBottom: 3 },
   pendingDate: { fontSize: 11 },
-  pendingActionRow: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-  },
+  pendingActionRow: { flexDirection: "row", borderTopWidth: 1 },
   pendingActionBtn: {
     flex: 1,
     flexDirection: "row",
@@ -1110,8 +1560,6 @@ const styles = StyleSheet.create({
   rejectBtn: { backgroundColor: "#EF4444" },
   approveBtn: { backgroundColor: "#10B981" },
   pendingActionText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 14 },
-
-  // Manual tab bar
   tabBar: {
     flexDirection: "row",
     height: 70,
@@ -1121,17 +1569,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
   },
-  tabBarItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  tabBarItem: { flex: 1, alignItems: "center", justifyContent: "center" },
   tabBarLabel: { fontSize: 11, marginTop: 2 },
-  tabBarFabWrap: {
-    top: -25,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  tabBarFabWrap: { top: -25, justifyContent: "center", alignItems: "center" },
   tabBarFabInner: {
     width: 60,
     height: 60,
@@ -1140,4 +1580,126 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+});
+
+const statsStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    paddingTop: 12,
+    paddingBottom: 30,
+    height: "85%",
+    width: "100%",
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 18,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+  title: { fontSize: 17, fontWeight: "800" },
+  subtitle: { fontSize: 12, marginTop: 3 },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  summaryRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: "center",
+  },
+  summaryNum: { fontSize: 15, fontWeight: "800", marginBottom: 2 },
+  summaryLabel: { fontSize: 10, textAlign: "center", lineHeight: 14 },
+  filterScroll: { paddingRight: 4, gap: 8, flexDirection: "row" },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterChipText: { fontSize: 12, fontWeight: "600" },
+  toggleRow: {
+    flexDirection: "row",
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 9,
+  },
+  toggleBtnText: { fontSize: 13, fontWeight: "700" },
+  chartBox: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    flex: 1,
+    minHeight: 200,
+  },
+  chartHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  chartHeaderLabel: { fontSize: 13, fontWeight: "700" },
+  chartHeaderCount: { fontSize: 11 },
+  barRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  barLabelCol: { width: 110, paddingRight: 10 },
+  barLabel: { fontSize: 12, fontWeight: "600", lineHeight: 16 },
+  barPct: { fontSize: 10, marginTop: 2 },
+  barTrack: {
+    flex: 1,
+    height: 24,
+    borderRadius: 12,
+    overflow: "visible",
+    position: "relative",
+    justifyContent: "center",
+  },
+  barFill: { height: 24, borderRadius: 12, position: "absolute", left: 0 },
+  crownDot: {
+    position: "absolute",
+    right: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countCol: {
+    width: 44,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  countText: { fontSize: 12, fontWeight: "800" },
+  empty: { alignItems: "center", paddingVertical: 30 },
+  emptyText: { marginTop: 10, fontSize: 13, textAlign: "center" },
 });
