@@ -176,7 +176,7 @@ function StatsModal({
               <Text
                 style={[statsStyles.title, { color: currentTheme.textMain }]}
               >
-                Statistik Temuan
+                Statistik Barang Hilang
               </Text>
               <Text
                 style={[
@@ -463,7 +463,7 @@ function StatsModal({
                               { backgroundColor: BAR_COLOR },
                             ]}
                           >
-                            <Text style={{ fontSize: 8 }}>👑</Text>
+                            <Text style={{ fontSize: 8 }}></Text>
                           </View>
                         )}
                       </View>
@@ -604,7 +604,7 @@ export default function ProfileAdminScreen() {
     itemId: string,
   ) => {
     const isApproved = statusLaporan === "approved";
-    const title = isApproved ? "Laporan Disetujui! 🎉" : "Laporan Ditolak ⚠️";
+    const title = isApproved ? "Laporan Disetujui! " : "Laporan Ditolak ";
     const body = isApproved
       ? `Laporan mengenai "${itemName}" sudah diverifikasi dan diposting ya!`
       : `Cek lagi laporan "${itemName}" anda, ada data yang kurang sesuai.`;
