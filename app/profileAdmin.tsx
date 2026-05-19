@@ -978,12 +978,12 @@ export default function ProfileAdminScreen() {
                 {isDarkMode ? (
                   <AntDesign name="moon" size={24} color="yellow" />
                 ) : (
-                  <AntDesign name="sun" size={24} color="black" />
+                  <AntDesign name="moon" size={24} color="black" />
                 )}
               </Text>
               <View>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>
-                  {isDarkMode ? "Dark Mode" : "Light Mode"}
+                  {isDarkMode ? "Dark Mode" : "Dark Mode"}
                 </Text>
                 <Text style={[styles.settingDesc, { color: theme.subtext }]}>
                   Tema tampilan aplikasi
