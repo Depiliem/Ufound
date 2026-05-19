@@ -181,7 +181,7 @@ function StatsModal({
               <Text
                 style={[statsStyles.title, { color: currentTheme.textMain }]}
               >
-                Statistik Temuan
+                Statistik Barang Hilang
               </Text>
               <Text
                 style={[
@@ -470,7 +470,6 @@ function StatsModal({
                               { backgroundColor: BAR_COLOR },
                             ]}
                           >
-                            <Text style={{ fontSize: 8 }}>👑</Text>
                           </View>
                         )}
                       </View>
