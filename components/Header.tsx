@@ -2,14 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Colors } from "../constants/Colors";
 import { supabase } from "../lib/supabase";
@@ -70,7 +70,7 @@ function StatsModal({
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const filteredRaw = rawData.filter(
-    (d) => filterBuilding === "Semua" || d.building === filterBuilding
+    (d) => filterBuilding === "Semua" || d.building === filterBuilding,
   );
 
   const chartRows: StatRow[] = React.useMemo(() => {
@@ -93,7 +93,8 @@ function StatsModal({
   const totalAll = rawData.length;
   const buildingMap: Record<string, number> = {};
   rawData.forEach((d) => {
-    if (d.building) buildingMap[d.building] = (buildingMap[d.building] || 0) + 1;
+    if (d.building)
+      buildingMap[d.building] = (buildingMap[d.building] || 0) + 1;
   });
   const topBuilding =
     Object.entries(buildingMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
@@ -108,18 +109,41 @@ function StatsModal({
     Object.entries(locationMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent // Ditambahkan untuk performa layout yang lebih baik
+      onRequestClose={onClose}
+    >
       <View style={statsStyles.overlay}>
-        <View style={[statsStyles.sheet, { backgroundColor: currentTheme.cardBackground }]}>
-          <View style={[statsStyles.handle, { backgroundColor: currentTheme.border }]} />
+        <View
+          style={[
+            statsStyles.sheet,
+            { backgroundColor: currentTheme.cardBackground },
+          ]}
+        >
+          <View
+            style={[
+              statsStyles.handle,
+              { backgroundColor: currentTheme.border },
+            ]}
+          />
 
           {/* ── Header ── */}
           <View style={statsStyles.header}>
             <View>
-              <Text style={[statsStyles.title, { color: currentTheme.textMain }]}>
-                Statistik Temuan
+              <Text
+                style={[statsStyles.title, { color: currentTheme.textMain }]}
+              >
+                Statistik Barang Hilang
               </Text>
-              <Text style={[statsStyles.subtitle, { color: currentTheme.textSecondary }]}>
+              <Text
+                style={[
+                  statsStyles.subtitle,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
                 Barang ditemukan yang sudah disetujui
               </Text>
             </View>
@@ -142,45 +166,80 @@ function StatsModal({
             <View
               style={[
                 statsStyles.summaryCard,
-                { backgroundColor: currentTheme.background, borderColor: currentTheme.border },
+                {
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border,
+                },
               ]}
             >
-              <Text style={[statsStyles.summaryNum, { color: currentTheme.textMain }]}>
+              <Text
+                style={[
+                  statsStyles.summaryNum,
+                  { color: currentTheme.textMain },
+                ]}
+              >
                 {totalAll}
               </Text>
-              <Text style={[statsStyles.summaryLabel, { color: currentTheme.textSecondary }]}>
+              <Text
+                style={[
+                  statsStyles.summaryLabel,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
                 Total{"\n"}Temuan
               </Text>
             </View>
             <View
               style={[
                 statsStyles.summaryCard,
-                { backgroundColor: currentTheme.background, borderColor: currentTheme.border },
+                {
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border,
+                },
               ]}
             >
               <Text
-                style={[statsStyles.summaryNum, { color: currentTheme.textMain }]}
+                style={[
+                  statsStyles.summaryNum,
+                  { color: currentTheme.textMain },
+                ]}
                 numberOfLines={1}
               >
                 {topBuilding}
               </Text>
-              <Text style={[statsStyles.summaryLabel, { color: currentTheme.textSecondary }]}>
+              <Text
+                style={[
+                  statsStyles.summaryLabel,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
                 Gedung{"\n"}Terbanyak
               </Text>
             </View>
             <View
               style={[
                 statsStyles.summaryCard,
-                { backgroundColor: currentTheme.background, borderColor: currentTheme.border },
+                {
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border,
+                },
               ]}
             >
               <Text
-                style={[statsStyles.summaryNum, { color: currentTheme.textMain, fontSize: 11 }]}
+                style={[
+                  statsStyles.summaryNum,
+                  { color: currentTheme.textMain, fontSize: 11 },
+                ]}
                 numberOfLines={2}
               >
                 {topLocation}
               </Text>
-              <Text style={[statsStyles.summaryLabel, { color: currentTheme.textSecondary }]}>
+              <Text
+                style={[
+                  statsStyles.summaryLabel,
+                  { color: currentTheme.textSecondary },
+                ]}
+              >
                 Lokasi{"\n"}Terbanyak
               </Text>
             </View>
@@ -191,7 +250,7 @@ function StatsModal({
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={statsStyles.filterScroll}
-            style={{ marginBottom: 10 }}
+            style={{ marginBottom: 10, flexGrow: 0 }}
           >
             {BUILDINGS.map((b) => {
               const active = filterBuilding === b;
@@ -202,7 +261,9 @@ function StatsModal({
                   style={[
                     statsStyles.filterChip,
                     {
-                      backgroundColor: active ? BAR_COLOR : currentTheme.background,
+                      backgroundColor: active
+                        ? BAR_COLOR
+                        : currentTheme.background,
                       borderColor: active ? BAR_COLOR : currentTheme.border,
                     },
                   ]}
@@ -224,7 +285,10 @@ function StatsModal({
           <View
             style={[
               statsStyles.toggleRow,
-              { backgroundColor: currentTheme.background, borderColor: currentTheme.border },
+              {
+                backgroundColor: currentTheme.background,
+                borderColor: currentTheme.border,
+              },
             ]}
           >
             {(["floor", "building"] as const).map((mode) => {
@@ -234,7 +298,10 @@ function StatsModal({
                 <TouchableOpacity
                   key={mode}
                   onPress={() => setViewMode(mode)}
-                  style={[statsStyles.toggleBtn, active && { backgroundColor: BAR_COLOR }]}
+                  style={[
+                    statsStyles.toggleBtn,
+                    active && { backgroundColor: BAR_COLOR },
+                  ]}
                 >
                   <Text
                     style={[
@@ -250,9 +317,16 @@ function StatsModal({
           </View>
 
           {/* ── Chart ── */}
-          <View style={[statsStyles.chartBox, { borderColor: currentTheme.border }]}>
+          <View
+            style={[statsStyles.chartBox, { borderColor: currentTheme.border }]}
+          >
             <View style={statsStyles.chartHeaderRow}>
-              <Text style={[statsStyles.chartHeaderLabel, { color: currentTheme.textMain }]}>
+              <Text
+                style={[
+                  statsStyles.chartHeaderLabel,
+                  { color: currentTheme.textMain },
+                ]}
+              >
                 {viewMode === "floor"
                   ? filterBuilding === "Semua"
                     ? "Semua Gedung & Lantai"
@@ -260,26 +334,49 @@ function StatsModal({
                   : "Perbandingan Gedung"}
               </Text>
               {totalFiltered > 0 && (
-                <Text style={[statsStyles.chartHeaderCount, { color: currentTheme.textSecondary }]}>
+                <Text
+                  style={[
+                    statsStyles.chartHeaderCount,
+                    { color: currentTheme.textSecondary },
+                  ]}
+                >
                   {totalFiltered} item
                 </Text>
               )}
             </View>
 
             {statsLoading ? (
-              <ActivityIndicator size="large" color={BAR_COLOR} style={{ marginVertical: 30 }} />
+              <ActivityIndicator
+                size="large"
+                color={BAR_COLOR}
+                style={{ marginVertical: 30 }}
+              />
             ) : chartRows.length === 0 ? (
               <View style={statsStyles.empty}>
-                <Ionicons name="bar-chart-outline" size={44} color={currentTheme.textSecondary} />
-                <Text style={[statsStyles.emptyText, { color: currentTheme.textSecondary }]}>
+                <Ionicons
+                  name="bar-chart-outline"
+                  size={44}
+                  color={currentTheme.textSecondary}
+                />
+                <Text
+                  style={[
+                    statsStyles.emptyText,
+                    { color: currentTheme.textSecondary },
+                  ]}
+                >
                   Belum ada data untuk filter ini
                 </Text>
               </View>
             ) : (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1 }}
+              >
                 {chartRows.map((row, idx) => {
                   const pct =
-                    totalFiltered > 0 ? Math.round((row.count / totalFiltered) * 100) : 0;
+                    totalFiltered > 0
+                      ? Math.round((row.count / totalFiltered) * 100)
+                      : 0;
                   const fillRatio = row.count / maxCount;
                   const fillW = Math.max(4, fillRatio * TRACK_WIDTH);
                   const isFirst = idx === 0;
@@ -288,12 +385,20 @@ function StatsModal({
                     <View key={row.label} style={statsStyles.barRow}>
                       <View style={statsStyles.barLabelCol}>
                         <Text
-                          style={[statsStyles.barLabel, { color: currentTheme.textMain }]}
+                          style={[
+                            statsStyles.barLabel,
+                            { color: currentTheme.textMain },
+                          ]}
                           numberOfLines={2}
                         >
                           {row.label}
                         </Text>
-                        <Text style={[statsStyles.barPct, { color: currentTheme.textSecondary }]}>
+                        <Text
+                          style={[
+                            statsStyles.barPct,
+                            { color: currentTheme.textSecondary },
+                          ]}
+                        >
                           {pct}%
                         </Text>
                       </View>
@@ -309,15 +414,20 @@ function StatsModal({
                             statsStyles.barFill,
                             {
                               width: fillW,
-                              backgroundColor: isFirst ? BAR_COLOR : BAR_COLOR + "99",
+                              backgroundColor: isFirst
+                                ? BAR_COLOR
+                                : BAR_COLOR + "99",
                             },
                           ]}
                         />
                         {isFirst && (
                           <View
-                            style={[statsStyles.crownDot, { backgroundColor: BAR_COLOR }]}
+                            style={[
+                              statsStyles.crownDot,
+                              { backgroundColor: BAR_COLOR },
+                            ]}
                           >
-                            <Text style={{ fontSize: 8 }}>👑</Text>
+                            <Text style={{ fontSize: 8 }}></Text>
                           </View>
                         )}
                       </View>
@@ -326,7 +436,9 @@ function StatsModal({
                         style={[
                           statsStyles.countCol,
                           {
-                            borderColor: isFirst ? BAR_COLOR + "60" : currentTheme.border,
+                            borderColor: isFirst
+                              ? BAR_COLOR + "60"
+                              : currentTheme.border,
                             backgroundColor: isFirst
                               ? BAR_COLOR + "15"
                               : currentTheme.background,
@@ -336,7 +448,11 @@ function StatsModal({
                         <Text
                           style={[
                             statsStyles.countText,
-                            { color: isFirst ? BAR_COLOR : currentTheme.textMain },
+                            {
+                              color: isFirst
+                                ? BAR_COLOR
+                                : currentTheme.textMain,
+                            },
                           ]}
                         >
                           {row.count}
@@ -423,7 +539,9 @@ const statsStyles = StyleSheet.create({
     borderTopRightRadius: 28,
     padding: 20,
     paddingTop: 12,
-    maxHeight: "90%",
+    paddingBottom: 30, // Ditambahkan: Safe area bawah untuk perangkat mobile
+    height: "85%", // Ditambahkan: Memberikan tinggi absolut agar flex child tidak overflow
+    width: "100%", // Ditambahkan: Pastikan lebar penuhi layar
   },
   handle: {
     width: 36,
@@ -460,7 +578,12 @@ const statsStyles = StyleSheet.create({
   summaryNum: { fontSize: 15, fontWeight: "800", marginBottom: 2 },
   summaryLabel: { fontSize: 10, textAlign: "center", lineHeight: 14 },
   filterScroll: { paddingRight: 4, gap: 8, flexDirection: "row" },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
   filterChipText: { fontSize: 12, fontWeight: "600" },
   toggleRow: {
     flexDirection: "row",
@@ -469,9 +592,20 @@ const statsStyles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 12,
   },
-  toggleBtn: { flex: 1, paddingVertical: 8, alignItems: "center", borderRadius: 9 },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 9,
+  },
   toggleBtnText: { fontSize: 13, fontWeight: "700" },
-  chartBox: { borderWidth: 1, borderRadius: 16, padding: 14, flex: 1, minHeight: 200 },
+  chartBox: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    flex: 1,
+    minHeight: 200,
+  },
   chartHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
