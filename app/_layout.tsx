@@ -2,12 +2,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
-import React, { useEffect } from "react";
-import { AppState, AppStateStatus } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { AppState, AppStateStatus, Platform } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AppProvider, useAppContext } from "../context/AppContext";
 import { deepLinkStore } from "../lib/deepLinkStore";
 import { supabase } from "../lib/supabase";
+
 
 const LAST_ACTIVE_KEY = "last_active_time";
 const USER_KEY = "current_user";
