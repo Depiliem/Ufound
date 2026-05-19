@@ -5,6 +5,7 @@
     "owner": "migos71",
     "projectId": "7a792651-c78e-490b-9efa-4f714e97b3fe",
     "version": "1.0.0",
+    "owner": "migos71",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ufound",
@@ -18,6 +19,8 @@
       }
     },
     "android": {
+      "package": "com.migos71.Ufound",
+      "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -67,7 +70,8 @@
           "cameraPermission": "Aplikasi Ufound membutuhkan akses kamera agar Anda dapat memfoto barang temuan secara langsung di lokasi."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

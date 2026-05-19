@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
 import React, { useEffect } from "react";
 import { AppState, AppStateStatus } from "react-native";
@@ -11,6 +12,29 @@ import { supabase } from "../lib/supabase";
 const LAST_ACTIVE_KEY = "last_active_time";
 const USER_KEY = "current_user";
 const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000;
+
+// ── FUNGSI PEMBANTU PUSH NOTIFICATION PERMISSION ──────────────────────────
+async function registerForPushNotificationsAsync() {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  if (finalStatus !== 'granted') {
+    console.log('Gagal mendapatkan token untuk push notification!');
+    return;
+  }
+}
 
 function GlobalSafeArea({ children }: { children: React.ReactNode }) {
   const { currentTheme } = useAppContext();
@@ -25,6 +49,10 @@ function GlobalSafeArea({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  // FIX ERROR 2: Berikan tipe data 'any' atau 'Subscription' dari expo-notifications
+  const notificationListener = useRef<any>(null);
+  const responseListener = useRef<any>(null);
+
   useEffect(() => {
     const updateLastActiveTime = async () => {
       try {
@@ -92,6 +120,14 @@ export default function RootLayout() {
     return () => {
       appStateSubscription.remove();
       linkingSubscription.remove();
+      
+      // Panggil metode .remove() langsung dari instance target object-nya
+      if (notificationListener.current) {
+        notificationListener.current.remove();
+      }
+      if (responseListener.current) {
+        responseListener.current.remove();
+      }
     };
   }, []);
 
@@ -107,6 +143,7 @@ export default function RootLayout() {
           >
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="report" />
+            <Stack.Screen name="admin" />
           </Stack>
         </GlobalSafeArea>
       </AppProvider>
