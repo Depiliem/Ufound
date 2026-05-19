@@ -1,57 +1,16 @@
-import AsyncStorage from "@react-native-async-storage/async-storage"; // Tambahkan import ini
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import { router, Stack } from "expo-router";
 import React, { useEffect } from "react";
-import { AppState, AppStateStatus } from "react-native"; // Tambahkan AppState
+import { AppState, AppStateStatus } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AppProvider, useAppContext } from "../context/AppContext";
 import { deepLinkStore } from "../lib/deepLinkStore";
-import { supabase } from "../lib/supabase"; // Tambahkan import ini jika dipakai untuk logout
+import { supabase } from "../lib/supabase";
 
-// ── KONSTANTA UNTUK SESI ──────────────────────────────────────────────────
 const LAST_ACTIVE_KEY = "last_active_time";
 const USER_KEY = "current_user";
-const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000; // 3 Hari
-
-// ── FUNGSI PEMBANTU (LANGSUNG DI SINI) ────────────────────────────────────
-const updateLastActiveTime = async () => {
-  try {
-    await AsyncStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
-  } catch (error) {
-    console.error("Gagal update waktu aktif:", error);
-  }
-};
-
-const checkInactivityAndLogout = async () => {
-  try {
-    const userString = await AsyncStorage.getItem(USER_KEY);
-    const lastActiveString = await AsyncStorage.getItem(LAST_ACTIVE_KEY);
-
-    if (userString && lastActiveString) {
-      const lastActiveTime = parseInt(lastActiveString, 10);
-      const currentTime = Date.now();
-
-      // Jika selisih waktu sekarang dengan waktu terakhir > 3 hari
-      if (currentTime - lastActiveTime > THREE_DAYS_IN_MS) {
-        console.log(
-          "[Sesi] 🕒 Sesi habis (lebih dari 3 hari). Menghapus data...",
-        );
-        await AsyncStorage.multiRemove([USER_KEY, LAST_ACTIVE_KEY]);
-        await supabase.auth.signOut(); // Opsional, bersihkan jika pakai sesi supabase
-
-        router.replace("/"); // Lempar ke halaman login awal
-        return true;
-      }
-    }
-
-    // Jika belum 3 hari, perbarui waktu aktifnya menjadi saat ini
-    await updateLastActiveTime();
-    return false;
-  } catch (error) {
-    console.error("Gagal mengecek sesi:", error);
-    return false;
-  }
-};
+const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000;
 
 function GlobalSafeArea({ children }: { children: React.ReactNode }) {
   const { currentTheme } = useAppContext();
@@ -67,16 +26,45 @@ function GlobalSafeArea({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   useEffect(() => {
-    // ── 1. JALANKAN PENGECEKAN SESI AUTO-LOGOUT ─────────────────────────
-    // Cek saat aplikasi pertama kali dibuka (Cold Start)
-    checkInactivityAndLogout();
+    const updateLastActiveTime = async () => {
+      try {
+        await AsyncStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
+      } catch (error) {
+        console.error("Gagal update waktu aktif:", error);
+      }
+    };
 
-    // Cek setiap kali aplikasi berubah status (ke background atau kembali dibuka)
+    // Fungsi mengecek durasi tidak aktif hanya ketika aplikasi kembali dibuka dari background
+    const checkInactivityOnResume = async () => {
+      try {
+        const userString = await AsyncStorage.getItem(USER_KEY);
+        const lastActiveString = await AsyncStorage.getItem(LAST_ACTIVE_KEY);
+
+        if (userString && lastActiveString) {
+          const lastActiveTime = parseInt(lastActiveString, 10);
+          const currentTime = Date.now();
+
+          // Skenario jika ditinggal lebih dari 3 hari saat aplikasi diminimize
+          if (currentTime - lastActiveTime > THREE_DAYS_IN_MS) {
+            console.log(
+              "[Sesi] Kedaluwarsa dari background. Menghapus sesi...",
+            );
+            await AsyncStorage.multiRemove([USER_KEY, LAST_ACTIVE_KEY]);
+            await supabase.auth.signOut();
+            router.replace("/");
+          }
+        }
+      } catch (error) {
+        console.error("Gagal memeriksa sesi resume:", error);
+      }
+    };
+
+    // ── MONITOR STATUS APLIKASI (BACKGROUND / FOREGROUND) ──
     const appStateSubscription = AppState.addEventListener(
       "change",
       (nextAppState: AppStateStatus) => {
         if (nextAppState === "active") {
-          checkInactivityAndLogout();
+          checkInactivityOnResume();
         } else if (
           nextAppState === "background" ||
           nextAppState === "inactive"
@@ -86,7 +74,7 @@ export default function RootLayout() {
       },
     );
 
-    // ── 2. LOGIKA DEEP LINKING (KODE ASLI KAMU) ─────────────────────────
+    // ── DEEP LINKING ──
     const navigateToCallback = (url: string) => {
       console.log("[Layout] 🔗 Simpan URL & navigasi ke callback");
       deepLinkStore.set(url);
@@ -94,18 +82,13 @@ export default function RootLayout() {
     };
 
     const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
-      console.log("[Layout] 🔗 Deep link diterima (foreground):", url);
       if (url.includes("auth/callback")) navigateToCallback(url);
     });
 
     Linking.getInitialURL().then((url) => {
-      if (url) {
-        console.log("[Layout] 🔗 Initial URL (cold start):", url);
-        if (url.includes("auth/callback")) navigateToCallback(url);
-      }
+      if (url && url.includes("auth/callback")) navigateToCallback(url);
     });
 
-    // ── 3. CLEANUP ────────────────────────────────────────────────────────
     return () => {
       appStateSubscription.remove();
       linkingSubscription.remove();

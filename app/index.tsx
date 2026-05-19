@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react"; // Pastikan useEffect diimport
 import {
   ActivityIndicator,
   Alert,
@@ -87,6 +87,53 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // State baru untuk menahan render layar selama pengecekan sesi cold start berjalan
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // ── PENGECEKAN AUTO-LOGIN SAAT APLIKASI DIBUKA DARI NOL ────────────────────
+  useEffect(() => {
+    const verifySessionOnStart = async () => {
+      try {
+        const userString = await AsyncStorage.getItem("current_user");
+        const lastActiveString = await AsyncStorage.getItem("last_active_time");
+
+        if (userString && lastActiveString) {
+          const lastActiveTime = parseInt(lastActiveString, 10);
+          const currentTime = Date.now();
+          const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000;
+
+          // Jika ternyata sesi lokal sudah lewat dari 3 hari, hapus total
+          if (currentTime - lastActiveTime > THREE_DAYS_IN_MS) {
+            await AsyncStorage.multiRemove([
+              "current_user",
+              "last_active_time",
+            ]);
+            await supabase.auth.signOut();
+            setCheckingAuth(false);
+            return;
+          }
+
+          // Jika sesi valid, perbarui waktu aktif saat ini dan langsung arahkan rute
+          const user = JSON.parse(userString);
+          await AsyncStorage.setItem("last_active_time", Date.now().toString());
+
+          if (user.role === "admin") {
+            router.replace("/admin");
+          } else {
+            router.replace("/(tabs)/user");
+          }
+          return;
+        }
+      } catch (err) {
+        console.error("Gagal memproses auto login cold start:", err);
+      }
+      // Jika tidak ada data user/sesi kosong, buka kunci loading agar form login terlihat
+      setCheckingAuth(false);
+    };
+
+    verifySessionOnStart();
+  }, []);
+
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert("Login Gagal", "Email dan password wajib diisi.");
@@ -117,6 +164,8 @@ export default function Login() {
           role: user.role,
         }),
       );
+
+      // Set timestamp awal saat berhasil login
       await AsyncStorage.setItem("last_active_time", Date.now().toString());
 
       if (user.role === "admin") {
@@ -139,6 +188,22 @@ export default function Login() {
     subtext: currentTheme.textSecondary,
     primary: "#2B7FE0",
   };
+
+  // Menampilkan layar loading bersih sewaktu sistem membaca AsyncStorage
+  if (checkingAuth) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: theme.bg,
+        }}
+      >
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.bg }]}>
