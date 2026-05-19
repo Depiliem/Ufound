@@ -1,40 +1,36 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { useAppContext } from "../../context/AppContext"; // <--- Import context tema
+import { useAppContext } from "../../context/AppContext";
 import { deepLinkStore } from "../../lib/deepLinkStore";
 import { supabase } from "../../lib/supabase";
 
-// ─── Module-level guard ────────────────────────────────────────────────────────
-// useRef TIDAK cukup karena React StrictMode (development/Expo Go) sengaja
-// unmount → remount komponen, sehingga setiap instance punya useRef baru (false).
-// Module-level variable survive siklus unmount→remount tersebut.
-//
-// Reset logic: jika store masih punya URL (deep link baru masuk),
-// guard direset agar magic link berikutnya tetap bisa diproses.
 let _callbackHandled = false;
 
 export default function AuthCallback() {
-  const { currentTheme } = useAppContext(); // <--- Ambil tema saat ini
+  const { currentTheme } = useAppContext();
   const [message, setMessage] = useState("Memverifikasi link…");
 
   useEffect(() => {
     const url = deepLinkStore.get();
 
-    // Jika store masih ada URL → invokasi pertama (atau deep link baru).
-    // Reset guard supaya magic link berikutnya tetap jalan.
     if (url) _callbackHandled = false;
-
-    // Guard: sudah ditangani dan tidak ada URL baru → StrictMode re-run, skip.
     if (_callbackHandled) return;
     _callbackHandled = true;
 
-    console.log("[Callback] URL dari store:", url ? url.substring(0, 80) + "…" : null);
-
     if (!url) {
-      console.log("[Callback] ❌ Tidak ada URL di store");
-      router.replace({ pathname: "/register", params: { verified: "error" } });
-      return;
+      // Memberikan jeda sebelum melempar error agar tidak terjadi flash "Verifikasi gagal"
+      // saat cold-start dimana deep link butuh sekian milidetik untuk ter-load.
+      const timer = setTimeout(() => {
+        if (!deepLinkStore.get()) {
+          console.log("[Callback] ❌ Tidak ada URL di store");
+          router.replace({
+            pathname: "/register",
+            params: { verified: "error" },
+          });
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
     }
 
     deepLinkStore.clear();
@@ -50,7 +46,9 @@ export default function AuthCallback() {
       const type = allParams["type"];
       const error = allParams["error"];
 
-      const errorPath = type === "recovery" ? "/forgot-password" : "/register";
+      const errorPath = (
+        type === "recovery" ? "/forgot-password" : "/register"
+      ) as any;
 
       if (error) {
         router.replace({ pathname: errorPath, params: { verified: "error" } });
@@ -64,7 +62,7 @@ export default function AuthCallback() {
           type: (type as any) || "magiclink",
         });
         if (otpErr) throw otpErr;
-        redirect(data.user?.email ?? "", type, url);
+        await redirect(data.user?.email ?? "", type, url);
         return;
       }
 
@@ -75,7 +73,7 @@ export default function AuthCallback() {
           refresh_token,
         });
         if (sessErr) throw sessErr;
-        redirect(data.user?.email ?? "", type, url);
+        await redirect(data.user?.email ?? "", type, url);
         return;
       }
 
@@ -86,11 +84,46 @@ export default function AuthCallback() {
     }
   };
 
-  const redirect = (email: string, type?: string, rawUrl: string = "") => {
-    setMessage("Berhasil! Mengarahkan…");
+  const redirect = async (
+    email: string,
+    type?: string,
+    rawUrl: string = "",
+  ) => {
     const isRecovery = type === "recovery" || rawUrl.includes("type=recovery");
-    const targetPath = isRecovery ? "/forgot-password" : "/register";
-    router.replace({ pathname: targetPath, params: { verified: "true", email } });
+
+    if (isRecovery) {
+      setMessage("Berhasil! Mengarahkan…");
+      router.replace({
+        pathname: "/forgot-password",
+        params: { verified: "true", email },
+      });
+    } else {
+      // Pindahkan pengecekan status user ke sini untuk menghilangkan loading ganda di register.tsx
+      setMessage("Mengecek data akun...");
+      try {
+        const { data: user } = await supabase
+          .from("users")
+          .select("id")
+          .eq("email", email.toLowerCase())
+          .maybeSingle();
+
+        setMessage("Berhasil! Mengarahkan…");
+        router.replace({
+          pathname: "/register",
+          params: {
+            verified: "true",
+            email,
+            isNewUser: user ? "false" : "true",
+          },
+        });
+      } catch (e) {
+        setMessage("Berhasil! Mengarahkan…");
+        router.replace({
+          pathname: "/register",
+          params: { verified: "true", email, isNewUser: "false" },
+        });
+      }
+    }
   };
 
   const parseAllParams = (url: string): Record<string, string> => {
@@ -116,7 +149,6 @@ export default function AuthCallback() {
     return result;
   };
 
-  // ─── Tema dinamis ───
   const theme = {
     bg: currentTheme.background,
     text: currentTheme.textSecondary,
@@ -131,8 +163,12 @@ export default function AuthCallback() {
   );
 }
 
-// Hardcode warna dihapus dari StyleSheet
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
   text: { fontSize: 14 },
 });
