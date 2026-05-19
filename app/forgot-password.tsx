@@ -27,6 +27,9 @@ const ALLOWED_DOMAINS = [
   "@lecturer.umn.ac.id",
 ];
 
+let _magicLinkSucceeded = false;
+
+// ── Animated wrapper ──────────────────────────────────────────────────────────
 function StepView({
   children,
   style,
@@ -57,26 +60,44 @@ function StepView({
   );
 }
 
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function ForgotPassword() {
-  const params = useLocalSearchParams<{ verified?: string; email?: string }>();
+  const params = useLocalSearchParams<{
+    verified?: string; // "true" saat callback berhasil
+    email?: string; // email yang dikembalikan dari callback
+  }>();
 
   const [step, setStep] = useState<Step>("email");
+
   const [email, setEmail] = useState("");
   const [pendingEmail, setPending] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPass, setConfirm] = useState("");
+
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const hasProcessedCallback = useRef(false); 
 
+  // ── Listener Deep Link dari Callback ─────────────────────────────────────
   useEffect(() => {
     if (!params.verified) return;
+    if (hasProcessedCallback.current) return; // ← guard
+    hasProcessedCallback.current = true;
 
     if (params.verified === "true" && params.email) {
+      console.log("[ForgotPass] ✅ Deep Link terverifikasi, masuk form reset.");
+      _magicLinkSucceeded = true; 
       setPending(params.email);
       setStep("reset");
     } else if (params.verified === "error") {
+      if (_magicLinkSucceeded) {
+        console.log("[ForgotPass] ⚠️ verified=error diabaikan — magic link sudah berhasil sebelumnya");
+        router.setParams({ verified: undefined, email: undefined });
+        return;
+      }
+      console.log("[ForgotPass] ❌ Verifikasi Deep Link gagal.");
       setErrorMsg(
         "Link verifikasi tidak valid atau sudah kedaluwarsa. Silakan minta link baru.",
       );
@@ -84,6 +105,7 @@ export default function ForgotPassword() {
     }
   }, [params.verified, params.email]);
 
+  // ── Step 1: Memicu Template Email Reset Supabase ─────────────────────────
   const handleSendLink = async () => {
     const trimmedEmail = email.trim().toLowerCase();
     const validDomain = ALLOWED_DOMAINS.some((d) => trimmedEmail.endsWith(d));
@@ -99,17 +121,31 @@ export default function ForgotPassword() {
     setErrorMsg("");
 
     try {
+      console.log("[ForgotPass] ⏳ Meminta link reset dari Supabase...");
+
+      // Gunakan expo-linking untuk men-generate URL otomatis sesuai environment (Expo Go / APK)
       const redirectUrl = Linking.createURL("auth/callback");
+      console.log("[ForgotPass] Redirect URL yang digunakan:", redirectUrl);
+
       const { error } = await supabase.auth.resetPasswordForEmail(
         trimmedEmail,
-        { redirectTo: redirectUrl },
+        {
+          redirectTo: redirectUrl, // <--- Gunakan variabel dinamis ini, bukan hardcode teks
+        },
       );
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
+      console.log(
+        "[ForgotPass] ✅ Link reset berhasil diproses untuk:",
+        trimmedEmail,
+      );
       setPending(trimmedEmail);
       setStep("sent");
     } catch (e: any) {
+      console.error("[ForgotPass] ❌ Exception:", e?.message);
       setErrorMsg(
         e?.message ??
           "Gagal mengirim link. Pastikan email ini sudah terdaftar resmi.",
@@ -119,6 +155,7 @@ export default function ForgotPassword() {
     }
   };
 
+  // ── Step 2: Simpan password baru ke Database ─────────────────────────────
   const handleUpdatePassword = async () => {
     if (!password.trim() || !confirmPass.trim()) {
       setErrorMsg("Password dan konfirmasi wajib diisi.");
@@ -137,8 +174,12 @@ export default function ForgotPassword() {
     setErrorMsg("");
 
     try {
+      console.log("[ForgotPass] ⏳ Memperbarui password...");
+
+      // Update sesi di Supabase Auth
       await supabase.auth.updateUser({ password: password });
 
+      // Update password di tabel custom `users` menggunakan fungsi SQL pgcrypto
       const { error: dbError } = await supabase.rpc("update_user_password", {
         p_email: pendingEmail,
         p_new_password: password,
@@ -146,6 +187,9 @@ export default function ForgotPassword() {
 
       if (dbError) throw dbError;
 
+      console.log(
+        "[ForgotPass] ✅ Password berhasil diperbarui di semua tempat.",
+      );
       Alert.alert(
         "Berhasil",
         "Password kamu berhasil diperbarui. Silakan login kembali.",
@@ -159,6 +203,7 @@ export default function ForgotPassword() {
         ],
       );
     } catch (e: any) {
+      console.error("[ForgotPass] ❌ Exception:", e?.message);
       setErrorMsg(e?.message ?? "Gagal memperbarui password. Coba lagi.");
     } finally {
       setLoading(false);
@@ -169,15 +214,15 @@ export default function ForgotPassword() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={BG} />
       <KeyboardAvoidingView
-        style={styles.kav}
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 40}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Back Button */}
           {(step === "email" || step === "error") && (
             <TouchableOpacity
               onPress={() => router.back()}
@@ -188,6 +233,7 @@ export default function ForgotPassword() {
             </TouchableOpacity>
           )}
 
+          {/* ── STEP 1: EMAIL ── */}
           {step === "email" && (
             <StepView style={styles.stepWrap}>
               <View style={styles.iconWrap}>
@@ -276,6 +322,7 @@ export default function ForgotPassword() {
             </StepView>
           )}
 
+          {/* ── STEP 2: TUNGGU EMAIL ── */}
           {step === "sent" && (
             <StepView style={styles.stepWrap}>
               <View
@@ -343,6 +390,7 @@ export default function ForgotPassword() {
             </StepView>
           )}
 
+          {/* ── STEP 3: BUAT PASSWORD BARU (Muncul setelah kembali dari link email) ── */}
           {step === "reset" && (
             <StepView style={styles.stepWrap}>
               <View
@@ -359,6 +407,7 @@ export default function ForgotPassword() {
                 akun kamu.
               </Text>
 
+              {/* Email readonly */}
               <View style={styles.inputGroup}>
                 <View
                   style={[styles.inputWrap, { opacity: 0.6, marginBottom: 14 }]}
@@ -381,6 +430,7 @@ export default function ForgotPassword() {
                 </View>
               </View>
 
+              {/* New Password */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Password Baru</Text>
                 <View style={styles.inputWrap}>
@@ -415,6 +465,7 @@ export default function ForgotPassword() {
                 </View>
               </View>
 
+              {/* Confirm New Password */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Konfirmasi Password</Text>
                 <View style={styles.inputWrap}>
@@ -475,6 +526,7 @@ export default function ForgotPassword() {
             </StepView>
           )}
 
+          {/* ── STEP: ERROR ── */}
           {step === "error" && (
             <StepView style={styles.stepWrap}>
               <View
@@ -516,6 +568,7 @@ export default function ForgotPassword() {
   );
 }
 
+// ── Reusable error box ────────────────────────────────────────────────────────
 function ErrorBox({ msg }: { msg: string }) {
   return (
     <View style={styles.errorBox}>
@@ -530,14 +583,13 @@ function ErrorBox({ msg }: { msg: string }) {
   );
 }
 
-// ── SINKRONISASI WARNA BACKGROUND BARU ──
-const BG = "#121622";
-const CARD = "#1A1F32";
-const BORDER = "#252D4A";
+// ── Styles ────────────────────────────────────────────────────────────────────
+const BG = "#161C2C";
+const CARD = "#1E2538";
+const BORDER = "#2A3350";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
-  kav: { flex: 1 },
   scroll: {
     flexGrow: 1,
     justifyContent: "flex-start",
@@ -636,7 +688,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
-  primaryBtnText: { fontSize: 15, fontWeight: "700", color: "#121622" },
+  primaryBtnText: { fontSize: 15, fontWeight: "700", color: "#161C2C" },
   btnDisabled: { opacity: 0.6 },
   ghostBtn: {
     flexDirection: "row",
