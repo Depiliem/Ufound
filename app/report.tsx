@@ -26,7 +26,6 @@ import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
 
 // ── NOTIFIKASI IMPORTS ──
-import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 
@@ -96,11 +95,9 @@ export default function Report() {
         return;
       }
 
-      try {
-        const projectId =
-          Constants.expoConfig?.extra?.eas?.projectId ??
-          Constants.easConfig?.projectId ??
-          "498b3269-ce50-4e0d-9bcc-950b072786a3"; // Fallback ke Project ID tim organisasi lu yang valid
+     try {
+        // ── 🛠️ PAKSA DI-HARDCODE KE ID ORGANISASI YANG VALID ──
+        const projectId = "7a792651-c78e-490b-9efa-4f714e97b3fe"; 
 
         token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
         setExpoPushToken(token);

@@ -635,7 +635,7 @@ export default function AdminPanel() {
     itemId: string,
   ) => {
     const isApproved = statusLaporan === "approved";
-    const title = isApproved ? "Laporan Disetujui! 🎉" : "Laporan Ditolak ⚠️";
+    const title = isApproved ? "Laporan Disetujui!" : "Laporan Ditolak ";
     const body = isApproved
       ? `Laporan mengenai "${itemName}" sudah diverifikasi dan diposting ya!`
       : `Cek lagi laporan "${itemName}" anda, ada data yang kurang sesuai.`;
@@ -650,15 +650,19 @@ export default function AdminPanel() {
     };
 
     try {
-      await fetch("https://exp.host/--/api/v2/push/send", {
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
         headers: {
-          Accept: "application/json",
+          "Accept": "application/json",
           "Accept-encoding": "gzip, deflate",
           "Content-Type": "application/json",
+          "Authorization": "Bearer GDqELPj4PN7sZiOadEeZCsrb2VylYLRWiEoBkKGl" 
         },
         body: JSON.stringify(message),
       });
+      
+      const resData = await response.json();
+      console.log("[Admin] Respons dari Expo Server:", JSON.stringify(resData));
     } catch (error) {
       console.error("Gagal mengirim push notification via API Expo:", error);
     }
