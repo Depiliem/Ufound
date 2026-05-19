@@ -18,7 +18,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/Colors";
 import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
@@ -88,10 +87,10 @@ export default function AdminPanel() {
       const checkRole = async () => {
         try {
           const raw = await AsyncStorage.getItem("current_user");
-          if (!raw) { router.replace("/"); return; }
+          if (!raw) { router.replace("/(tabs)"); return; }
           const user = JSON.parse(raw);
-          if (user.role !== "admin") { router.replace("/"); return; }
-        } catch { router.replace("/"); }
+          if (user.role !== "admin") { router.replace("/(tabs)"); return; }
+        } catch { router.replace("/(tabs)"); }
       };
       checkRole();
     }, []),
@@ -376,17 +375,17 @@ export default function AdminPanel() {
       </View>
 
       <Modal visible={isModerationVisible} animationType="slide" onRequestClose={() => setIsModerationVisible(false)}>
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: currentTheme.background }]} edges={["top", "bottom"]}>
+        <View style={[styles.modalContainer, { backgroundColor: currentTheme.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: currentTheme.border, backgroundColor: Colors.primary }]}><TouchableOpacity onPress={() => setIsModerationVisible(false)}><Ionicons name="close" size={26} color="#FFFFFF" /></TouchableOpacity><Text style={styles.modalTitle}>Moderasi Laporan</Text><View style={{ width: 26 }} /></View>
           <View style={[styles.tabContainer, { borderBottomColor: currentTheme.border }]}><TouchableOpacity style={[styles.tabButton, { borderBottomColor: currentTheme.border }, pendingTab === "lost" && { borderBottomColor: Colors.primary }]} onPress={() => setPendingTab("lost")}><Text style={[styles.tabText, { color: currentTheme.textSecondary }, pendingTab === "lost" && { color: Colors.primary }]}>Lost</Text></TouchableOpacity><TouchableOpacity style={[styles.tabButton, { borderBottomColor: currentTheme.border }, pendingTab === "found" && { borderBottomColor: Colors.primary }]} onPress={() => setPendingTab("found")}><Text style={[styles.tabText, { color: currentTheme.textSecondary }, pendingTab === "found" && { color: Colors.primary }]}>Found</Text></TouchableOpacity></View>
           <PendingList pendingTab={pendingTab} currentTheme={currentTheme} renderPendingCard={renderPendingCard} pendingLoading={pendingLoading} pendingItems={pendingItems} fetchPendingItems={fetchPendingItems} />
-        </SafeAreaView>
+        </View>
       </Modal>
 
       <View style={[styles.tabBar, { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border }]}>
         <View style={styles.tabBarItem}><Ionicons name="home" size={24} color={Colors.primary} /><Text style={[styles.tabBarLabel, { color: Colors.primary }]}>Home</Text></View>
         <TouchableOpacity style={styles.tabBarFabWrap} onPress={() => router.push("/report")}><View style={[styles.tabBarFabInner, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}><Ionicons name="add" size={32} color={Colors.primary} /></View></TouchableOpacity>
-        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push("/profileAdmin")}><Ionicons name="person-outline" size={24} color={currentTheme.textSecondary} /><Text style={[styles.tabBarLabel, { color: currentTheme.textSecondary }]}>Profile</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.tabBarItem} onPress={() => router.push("/(tabs)/profile")}><Ionicons name="person-outline" size={24} color={currentTheme.textSecondary} /><Text style={[styles.tabBarLabel, { color: currentTheme.textSecondary }]}>Profile</Text></TouchableOpacity>
       </View>
     </View>
   );
@@ -466,7 +465,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 17, fontWeight: "bold", marginTop: 14, marginBottom: 6 },
   emptyText: { fontSize: 14, textAlign: "center", marginTop: 15 },
   modalContainer: { flex: 1 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 14, paddingTop: Platform.OS === "ios" ? 54 : 14, borderBottomWidth: 1 },
   modalTitle: { fontSize: 17, fontWeight: "700", color: "#FFFFFF" },
   pendingListContainer: { padding: 16, paddingBottom: 60 },
   pendingCard: { borderRadius: 12, borderWidth: 1, marginBottom: 12, overflow: "hidden" },

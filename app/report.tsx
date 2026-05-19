@@ -4,7 +4,7 @@ import { decode } from "base64-arraybuffer";
 import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Dimensions,
@@ -26,9 +26,9 @@ import { useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
 
 // ── NOTIFIKASI IMPORTS ──
-import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 
 export default function Report() {
   const [reportType, setReportType] = useState<"lost" | "found">("lost");
@@ -360,15 +360,6 @@ export default function Report() {
 
   return (
     <View style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
-      {/* ── Top Header with Back Button ── */}
-      <View style={styles.topHeader}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.topHeaderTitle}>Buat Laporan</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -584,28 +575,6 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   keyboardAvoid: { flex: 1 },
   container: { flex: 1 },
-
-  // ── Top Header ──
-  topHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.primary,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  topHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
-  },
   content: { padding: 20, paddingBottom: 60 },
   toggleContainer: {
     flexDirection: "row",
