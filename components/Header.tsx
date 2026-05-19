@@ -51,11 +51,12 @@ function StatsModal({
   const fetchStats = async () => {
     try {
       setStatsLoading(true);
+      // UBAH: Baca dari tabel 'item_logs' alih-alih tabel 'items'
       const { data, error } = await supabase
-        .from("items")
+        .from("item_logs")
         .select("building, floor")
-        .eq("type", "found")
-        .eq("status", "approved");
+        .eq("type", "found"); // Anda bisa mengatur filter apa pun di sini
+
       if (error || !data) return;
       setRawData(data as RawStatItem[]);
     } catch {
