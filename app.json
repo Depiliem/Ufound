@@ -9,9 +9,23 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.migos71.Ufound",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "ufound"
+            }
+          ]
+        }
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -22,7 +36,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "package": "com.migos71.Ufound"
     },
     "web": {
       "output": "static",
@@ -58,9 +73,8 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "498b3269-ce50-4e0d-9bcc-950b072786a3"
+        "projectId": "7a792651-c78e-490b-9efa-4f714e97b3fe"
       }
-    },
-    "owner": "ufound"
+    }
   }
 }

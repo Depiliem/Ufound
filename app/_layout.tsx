@@ -1,21 +1,58 @@
-import { Stack, router } from "expo-router";
-import * as Notifications from "expo-notifications";
-import React, { useEffect, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage"; // Tambahkan import ini
+import * as Linking from "expo-linking";
+import { router, Stack } from "expo-router";
+import React, { useEffect } from "react";
+import { AppState, AppStateStatus } from "react-native"; // Tambahkan AppState
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AppProvider, useAppContext } from "../context/AppContext";
- 
-// ── Konfigurasi tampilan notifikasi saat app sedang FOREGROUND ─────────────
-// Ini yang bikin notif muncul di atas layar (banner) meski app sedang dibuka
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,    // tampilkan banner di atas layar
-    shouldPlaySound: true,    // mainkan suara
-    shouldSetBadge: false,
-    shouldShowBanner: true,   // iOS 14+ — banner di atas layar
-    shouldShowList: true,     // iOS — tampil di notification center
-  }),
-});
- 
+import { deepLinkStore } from "../lib/deepLinkStore";
+import { supabase } from "../lib/supabase"; // Tambahkan import ini jika dipakai untuk logout
+
+// ── KONSTANTA UNTUK SESI ──────────────────────────────────────────────────
+const LAST_ACTIVE_KEY = "last_active_time";
+const USER_KEY = "current_user";
+const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000; // 3 Hari
+
+// ── FUNGSI PEMBANTU (LANGSUNG DI SINI) ────────────────────────────────────
+const updateLastActiveTime = async () => {
+  try {
+    await AsyncStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
+  } catch (error) {
+    console.error("Gagal update waktu aktif:", error);
+  }
+};
+
+const checkInactivityAndLogout = async () => {
+  try {
+    const userString = await AsyncStorage.getItem(USER_KEY);
+    const lastActiveString = await AsyncStorage.getItem(LAST_ACTIVE_KEY);
+
+    if (userString && lastActiveString) {
+      const lastActiveTime = parseInt(lastActiveString, 10);
+      const currentTime = Date.now();
+
+      // Jika selisih waktu sekarang dengan waktu terakhir > 3 hari
+      if (currentTime - lastActiveTime > THREE_DAYS_IN_MS) {
+        console.log(
+          "[Sesi] 🕒 Sesi habis (lebih dari 3 hari). Menghapus data...",
+        );
+        await AsyncStorage.multiRemove([USER_KEY, LAST_ACTIVE_KEY]);
+        await supabase.auth.signOut(); // Opsional, bersihkan jika pakai sesi supabase
+
+        router.replace("/"); // Lempar ke halaman login awal
+        return true;
+      }
+    }
+
+    // Jika belum 3 hari, perbarui waktu aktifnya menjadi saat ini
+    await updateLastActiveTime();
+    return false;
+  } catch (error) {
+    console.error("Gagal mengecek sesi:", error);
+    return false;
+  }
+};
+
 function GlobalSafeArea({ children }: { children: React.ReactNode }) {
   const { currentTheme } = useAppContext();
   return (
@@ -27,49 +64,58 @@ function GlobalSafeArea({ children }: { children: React.ReactNode }) {
     </SafeAreaView>
   );
 }
- 
-function NotificationHandler() {
-  // Listener untuk notifikasi yang DITERIMA saat app foreground
-  const notificationListener = useRef<Notifications.Subscription | null>(null);
-  // Listener untuk notifikasi yang DITEKAN user (dari mana saja)
-  const responseListener = useRef<Notifications.Subscription | null>(null);
- 
+
+export default function RootLayout() {
   useEffect(() => {
-    // Saat notifikasi masuk ketika app sedang buka — cukup tampilkan saja
-    // (handler di atas sudah mengurus banner-nya)
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((_notification) => {
-        // Bisa tambahkan log atau state update di sini jika diperlukan
-      });
- 
-    // Saat user MENEKAN notifikasi — navigasi ke halaman detail item
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data as {
-          url?: string;
-        };
-        // data.url diisi "/detail/<id>" dari admin.tsx saat kirim notif
-        if (data?.url) {
-          router.push(data.url as any);
+    // ── 1. JALANKAN PENGECEKAN SESI AUTO-LOGOUT ─────────────────────────
+    // Cek saat aplikasi pertama kali dibuka (Cold Start)
+    checkInactivityAndLogout();
+
+    // Cek setiap kali aplikasi berubah status (ke background atau kembali dibuka)
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (nextAppState === "active") {
+          checkInactivityAndLogout();
+        } else if (
+          nextAppState === "background" ||
+          nextAppState === "inactive"
+        ) {
+          updateLastActiveTime();
         }
-      });
- 
+      },
+    );
+
+    // ── 2. LOGIKA DEEP LINKING (KODE ASLI KAMU) ─────────────────────────
+    const navigateToCallback = (url: string) => {
+      console.log("[Layout] 🔗 Simpan URL & navigasi ke callback");
+      deepLinkStore.set(url);
+      router.push("/auth/callback");
+    };
+
+    const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
+      console.log("[Layout] 🔗 Deep link diterima (foreground):", url);
+      if (url.includes("auth/callback")) navigateToCallback(url);
+    });
+
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        console.log("[Layout] 🔗 Initial URL (cold start):", url);
+        if (url.includes("auth/callback")) navigateToCallback(url);
+      }
+    });
+
+    // ── 3. CLEANUP ────────────────────────────────────────────────────────
     return () => {
-      notificationListener.current?.remove();
-      responseListener.current?.remove();
+      appStateSubscription.remove();
+      linkingSubscription.remove();
     };
   }, []);
- 
-  return null;
-}
- 
-export default function RootLayout() {
+
   return (
     <SafeAreaProvider>
       <AppProvider>
         <GlobalSafeArea>
-          {/* Handler notifikasi dipasang di level root agar selalu aktif */}
-          <NotificationHandler />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -84,4 +130,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
- 
