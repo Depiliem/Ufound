@@ -48,7 +48,8 @@ function PixelLogo() {
                   height: CELL,
                   margin: 1,
                   borderRadius: 1,
-                  backgroundColor: cell === 1 ? (r > 3 ? DARK : BLUE) : "transparent",
+                  backgroundColor:
+                    cell === 1 ? (r > 3 ? DARK : BLUE) : "transparent",
                 }}
               />
             ))}
@@ -64,8 +65,19 @@ function PixelLogo() {
 const logoStyles = StyleSheet.create({
   wrapper: { alignItems: "center" },
   grid: { marginBottom: 10 },
-  brandName: { fontSize: 34, fontWeight: "800", color: "#2B7FE0", letterSpacing: 2, marginBottom: 4 },
-  brandSub: { fontSize: 12, fontWeight: "600", color: "#8A9AB8", letterSpacing: 4 },
+  brandName: {
+    fontSize: 34,
+    fontWeight: "800",
+    color: "#2B7FE0",
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  brandSub: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#8A9AB8",
+    letterSpacing: 4,
+  },
 });
 
 export default function Login() {
@@ -105,6 +117,7 @@ export default function Login() {
           role: user.role,
         }),
       );
+      await AsyncStorage.setItem("last_active_time", Date.now().toString());
 
       if (user.role === "admin") {
         router.replace("/admin");
@@ -129,23 +142,39 @@ export default function Login() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.bg} />
+      <StatusBar
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
+        backgroundColor={theme.bg}
+      />
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.logoSection}>
             <PixelLogo />
           </View>
 
           <View style={styles.formSection}>
-            <Text style={[styles.welcomeText, { color: theme.text }]}>Welcome</Text>
+            <Text style={[styles.welcomeText, { color: theme.text }]}>
+              Welcome
+            </Text>
 
             <View style={styles.inputWrap}>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 placeholder="Email"
                 placeholderTextColor={theme.subtext}
                 keyboardType="email-address"
@@ -157,23 +186,50 @@ export default function Login() {
 
             <View style={styles.inputWrapPass}>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text, paddingRight: 52 }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    color: theme.text,
+                    paddingRight: 52,
+                  },
+                ]}
                 placeholder="Password"
                 placeholderTextColor={theme.subtext}
                 secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
               />
-              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword((p) => !p)} activeOpacity={0.7}>
-                <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={theme.subtext} />
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={() => setShowPassword((p) => !p)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-outline" : "eye-off-outline"}
+                  size={20}
+                  color={theme.subtext}
+                />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity onPress={() => router.push("/forgot-password")} style={styles.forgotBtn} activeOpacity={0.7}>
-              <Text style={[styles.forgotText, { color: theme.subtext }]}>Forgot Password?</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/forgot-password")}
+              style={styles.forgotBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.forgotText, { color: theme.subtext }]}>
+                Forgot Password?
+              </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.loginBtn, loading && styles.loginBtnDisabled]} onPress={handleLogin} activeOpacity={0.85} disabled={loading}>
+            <TouchableOpacity
+              style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+              onPress={handleLogin}
+              activeOpacity={0.85}
+              disabled={loading}
+            >
               {loading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
@@ -182,9 +238,16 @@ export default function Login() {
             </TouchableOpacity>
 
             <View style={styles.registerRow}>
-              <Text style={[styles.noAccountText, { color: theme.subtext }]}>Tidak punya akun? </Text>
-              <TouchableOpacity onPress={() => router.push("/register")} activeOpacity={0.7}>
-                <Text style={[styles.registerLink, { color: theme.primary }]}>Registrasi disini</Text>
+              <Text style={[styles.noAccountText, { color: theme.subtext }]}>
+                Tidak punya akun?{" "}
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push("/register")}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.registerLink, { color: theme.primary }]}>
+                  Registrasi disini
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -197,20 +260,48 @@ export default function Login() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   kav: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 28, paddingVertical: 40 },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    paddingVertical: 40,
+  },
   logoSection: { alignItems: "center", marginBottom: 60 },
   formSection: { width: "100%" },
   welcomeText: { fontSize: 28, fontWeight: "800", marginBottom: 24 },
   inputWrap: { position: "relative", marginBottom: 25 },
   inputWrapPass: { position: "relative" },
-  input: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 16, fontSize: 15 },
-  eyeBtn: { position: "absolute", right: 16, top: 0, bottom: 0, justifyContent: "center" },
-  loginBtn: { backgroundColor: "#2B7FE0", borderRadius: 14, paddingVertical: 17, alignItems: "center", elevation: 2 },
+  input: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    fontSize: 15,
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 16,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+  },
+  loginBtn: {
+    backgroundColor: "#2B7FE0",
+    borderRadius: 14,
+    paddingVertical: 17,
+    alignItems: "center",
+    elevation: 2,
+  },
   loginBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   loginBtnDisabled: { opacity: 0.6 },
   forgotBtn: { alignItems: "flex-end", marginTop: 8, marginBottom: 24 },
   forgotText: { fontSize: 12, fontWeight: "600" },
-  registerRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 30 },
+  registerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 30,
+  },
   noAccountText: { fontSize: 14 },
   registerLink: { fontSize: 14, fontWeight: "700" },
 });

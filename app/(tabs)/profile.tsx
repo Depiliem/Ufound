@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AntDesign from "@expo/vector-icons/AntDesign";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -33,6 +34,7 @@ type Stats = {
 
 export default function ProfileScreen() {
   const { isDarkMode, toggleTheme, currentTheme } = useAppContext();
+  const [isNotif, setIsNotif] = React.useState(true);
   const [user, setUser] = useState<UserData | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalLost: 0,
@@ -96,6 +98,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
+        {/* ── Profile Card ── */}
         <View
           style={[
             styles.profileCard,
@@ -118,6 +121,7 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
+        {/* ── Stats Card ── */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
           Statistik Laporan
         </Text>
@@ -211,6 +215,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── Settings ── */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
           Pengaturan
         </Text>
@@ -226,12 +231,11 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              {/* MODIFIKASI: Mengganti AntDesign ke Ionicons bawaan Expo */}
               <Text style={styles.settingEmoji}>
                 {isDarkMode ? (
-                  <Ionicons name="moon" size={22} color="#FCE354" />
+                  <AntDesign name="moon" size={24} color="yellow" />
                 ) : (
-                  <Ionicons name="sunny" size={22} color="#FF9500" />
+                  <AntDesign name="sun" size={24} color="black" />
                 )}
               </Text>
               <View>
@@ -291,7 +295,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     overflow: "hidden",
   },
-  defaultAvatarImage: { width: 90, height: 90, resizeMode: "cover" },
+  defaultAvatarImage: {
+    width: 90,
+    height: 90,
+    resizeMode: "cover",
+  },
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -309,6 +317,7 @@ const styles = StyleSheet.create({
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconButton: { marginLeft: 15 },
   scroll: { padding: 16 },
+
   profileCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -320,6 +329,8 @@ const styles = StyleSheet.create({
   avatar: { width: 90, height: 90, borderRadius: 45 },
   profileName: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
   profileNim: { fontSize: 14, marginBottom: 12 },
+
+  // Stats
   statsCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -354,12 +365,14 @@ const styles = StyleSheet.create({
   statsApprovedText: { fontSize: 13, flex: 1 },
   statsHistoryBtn: { paddingHorizontal: 4 },
   statsHistoryBtnText: { fontSize: 12, fontWeight: "600" },
+
   sectionTitle: {
     fontSize: 15,
     fontWeight: "700",
     marginBottom: 10,
     marginLeft: 4,
   },
+
   settingsCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -375,7 +388,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   settingLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  settingEmoji: { width: 24, justifyContent: "center", alignItems: "center" },
+  settingEmoji: { fontSize: 22 },
   settingLabel: { fontSize: 15, fontWeight: "600" },
   settingDesc: { fontSize: 12, marginTop: 2 },
 });
