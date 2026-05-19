@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "609200651521",
+    "project_id": "ufound-6393d",
+    "storage_bucket": "ufound-6393d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:609200651521:android:856354b85775e635e16f00",
+        "android_client_info": {
+          "package_name": "com.migos71.Ufound"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYAMlW3a0nfVbCRrzNEiYRo4RzUPeQqQE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
