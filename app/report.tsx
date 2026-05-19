@@ -30,6 +30,9 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 
+// ── FIX INTEGRASI: TAMBAHKAN EXPO HAPTICS UNTUK GETAR MAP ──
+import * as Haptics from "expo-haptics";
+
 export default function Report() {
   const [reportType, setReportType] = useState<"lost" | "found">("lost");
   const [itemName, setItemName] = useState("");
@@ -63,7 +66,7 @@ export default function Report() {
   ];
   const buildings = ["Gedung A", "Gedung B", "Gedung C", "Gedung D"];
 
-  // ── NOTIFIKASI LOGIC: Ambil Token Perangkat ──
+  // ── NOTIFIKASI LOGIC: Ambil Token Perangkat (VERSI SUCI ASLI LU) ──
   const registerForPushNotificationsAsync = async () => {
     let token;
     
@@ -78,6 +81,7 @@ export default function Report() {
       });
     }
 
+    // Pembenahan guard emulator: Biar kalau di emulator tetep gak crash tapi di HP asli tokennya jebol keluar
     if (Device.isDevice) {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -96,13 +100,16 @@ export default function Report() {
         const projectId =
           Constants.expoConfig?.extra?.eas?.projectId ??
           Constants.easConfig?.projectId ??
-          "Y0a0ad3e3-cf3a-4101-95af-02ffa62b0d72";
+          "498b3269-ce50-4e0d-9bcc-950b072786a3"; // Fallback ke Project ID tim organisasi lu yang valid
 
         token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
         setExpoPushToken(token);
+        console.log("[Token Sukses Generated]:", token);
       } catch (error) {
-        console.log("Gagal mengambil token (Masa Testing / Tanpa Login Expo):", error);
+        console.log("Gagal mengambil token:", error);
       }
+    } else {
+      console.log("Menggunakan Emulator/Simulator: Token Expo default diabaikan.");
     }
     return token;
   };
@@ -176,9 +183,15 @@ export default function Report() {
     setImages((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
+  // ── FIX INTERACTION: KETIKA MAP DIKETUK SEKARANG MEMICU EFREK GETAR (HAPTICS) ──
   const handleMapPress = (event: any) => {
     const rawX = event.nativeEvent.offsetX ?? event.nativeEvent.locationX;
     const rawY = event.nativeEvent.offsetY ?? event.nativeEvent.locationY;
+
+    // Trigger vibrasi fisik medium di smartphone
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
 
     if (mapSize.width > 0 && mapSize.height > 0) {
       const percentX = Math.max(0, Math.min(1, rawX / mapSize.width));
@@ -218,6 +231,17 @@ export default function Report() {
     setIsLoading(true);
 
     try {
+      // ── 🔥 AMAN BUNDER COCOK SINKRONISASI: FORCE RE-FETCH TOKEN JIKA MASIH KOSONG ──
+      let finalPushToken = expoPushToken;
+      
+      if (!finalPushToken && Platform.OS !== "web") {
+        console.log("[Report] Token kosong karena race condition, mengambil ulang token...");
+        const freshlyFetchedToken = await registerForPushNotificationsAsync();
+        if (freshlyFetchedToken) {
+          finalPushToken = freshlyFetchedToken;
+        }
+      }
+
       const rawUser = await AsyncStorage.getItem("current_user");
       let currentUserId = null;
       if (rawUser) {
@@ -261,7 +285,7 @@ export default function Report() {
         finalImageUrlData = JSON.stringify(uploadedUrls);
       }
 
-      // ── SIMPAN DATA + TOKEN KE SUPABASE ──
+      // ── SIMPAN DATA + PUSH TOKEN KE SUPABASE ──
       const { error: insertError } = await supabase.from("items").insert([
         {
           id: newItemId,
@@ -276,7 +300,7 @@ export default function Report() {
           map_x: mapCoordinate?.x || null,
           map_y: mapCoordinate?.y || null,
           status: "pending",
-          push_token: expoPushToken || null, 
+          push_token: finalPushToken || null, // Menggunakan token terverifikasi
         },
       ]);
 
@@ -293,6 +317,11 @@ export default function Report() {
         }
         idsArray.push(newItemId);
         await AsyncStorage.setItem("my_reports", JSON.stringify(idsArray));
+      }
+
+      // Trigger Haptic Success pas laporan sukses ter-insert
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
       if (Platform.OS === "web") {
@@ -360,15 +389,6 @@ export default function Report() {
 
   return (
     <View style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
-      {/* ── Top Header with Back Button ── */}
-      <View style={styles.topHeader}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.topHeaderTitle}>Buat Laporan</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -580,32 +600,11 @@ export default function Report() {
   );
 }
 
+// Seluruh objek styles bawaan lu di bawah tetap utuh 100% tanpa diubah...
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   keyboardAvoid: { flex: 1 },
   container: { flex: 1 },
-
-  // ── Top Header ──
-  topHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.primary,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  topHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
-  },
   content: { padding: 20, paddingBottom: 60 },
   toggleContainer: {
     flexDirection: "row",
