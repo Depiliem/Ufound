@@ -1006,7 +1006,9 @@ export default function ProfileAdminScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
-              <Text style={styles.settingEmoji}>🚪</Text>
+              <Text style={styles.settingEmoji}>
+                <Ionicons name="log-out-outline" size={22} color="#FF3B30" />
+              </Text>
               <View>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>
                   Log Out
