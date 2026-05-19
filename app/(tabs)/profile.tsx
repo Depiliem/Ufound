@@ -87,7 +87,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg }]}>
-      <Header title="Profile" />
+      <Header title="Profile" currentTheme={currentTheme} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* ── Profile Card ── */}
