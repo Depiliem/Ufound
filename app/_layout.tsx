@@ -1,11 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, Platform } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AppProvider, useAppContext } from "../context/AppContext";
 import { supabase } from "../lib/supabase";
+
+SplashScreen.preventAutoHideAsync();
 
 const LAST_ACTIVE_KEY = "last_active_time";
 const USER_KEY = "current_user";
@@ -49,6 +52,20 @@ function GlobalSafeArea({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   const notificationListener = useRef<any>(null);
   const responseListener = useRef<any>(null);
+
+  useEffect(() => {
+    const hideSplash = async () => {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        await SplashScreen.hideAsync();
+      }
+    };
+
+    hideSplash();
+  }, []);
 
   useEffect(() => {
     const updateLastActiveTime = async () => {

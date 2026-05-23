@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,43 +22,14 @@ import { useAppContext } from "../context/AppContext";
 import { useNfc } from "../hooks/useNfc";
 import { supabase } from "../lib/supabase";
 
-function PixelLogo() {
-  const BLUE = "#2B7FE0";
-  const DARK = "#1B4FA0";
-
-  const grid = [
-    [1, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 1],
-    [1, 1, 0, 0, 1, 1],
-    [0, 1, 1, 1, 1, 0],
-    [0, 0, 1, 1, 0, 0],
-  ];
-
-  const CELL = 9;
-
+function AppLogo() {
   return (
     <View style={logoStyles.wrapper}>
-      <View style={logoStyles.grid}>
-        {grid.map((row, r) => (
-          <View key={r} style={{ flexDirection: "row" }}>
-            {row.map((cell, c) => (
-              <View
-                key={c}
-                style={{
-                  width: CELL,
-                  height: CELL,
-                  margin: 1,
-                  borderRadius: 1,
-                  backgroundColor:
-                    cell === 1 ? (r > 3 ? DARK : BLUE) : "transparent",
-                }}
-              />
-            ))}
-          </View>
-        ))}
-      </View>
+      <Image
+        source={require("../assets/images/icon-ufound.png")}
+        style={logoStyles.logoImage}
+        resizeMode="contain"
+      />
       <Text style={logoStyles.brandName}>U-Found</Text>
       <Text style={logoStyles.brandSub}>UMN Lost N Found</Text>
     </View>
@@ -66,7 +38,12 @@ function PixelLogo() {
 
 const logoStyles = StyleSheet.create({
   wrapper: { alignItems: "center" },
-  grid: { marginBottom: 10 },
+  logoImage: {
+    width: 200,
+    height: 200,
+    marginBottom: -40,
+    marginTop: -75,
+  },
   brandName: {
     fontSize: 34,
     fontWeight: "800",
@@ -90,10 +67,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // NFC Login state
   const [nfcModalVisible, setNfcModalVisible] = useState(false);
   const [nfcLoginLoading, setNfcLoginLoading] = useState(false);
-  const { status: nfcStatus, error: nfcError, startScan, cancelScan } = useNfc();
+  const {
+    status: nfcStatus,
+    error: nfcError,
+    startScan,
+    cancelScan,
+  } = useNfc();
 
   useEffect(() => {
     const verifySessionOnStart = async () => {
@@ -107,7 +88,10 @@ export default function Login() {
           const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000;
 
           if (currentTime - lastActiveTime > THREE_DAYS_IN_MS) {
-            await AsyncStorage.multiRemove(["current_user", "last_active_time"]);
+            await AsyncStorage.multiRemove([
+              "current_user",
+              "last_active_time",
+            ]);
             await supabase.auth.signOut();
             setCheckingAuth(false);
             return;
@@ -160,7 +144,7 @@ export default function Login() {
           nim: user.nim,
           email: user.email,
           role: user.role,
-        })
+        }),
       );
       await AsyncStorage.setItem("last_active_time", Date.now().toString());
 
@@ -176,20 +160,17 @@ export default function Login() {
     }
   };
 
-  // ── NFC Login ────────────────────────────────────────────
   const handleNfcLogin = async () => {
     setNfcModalVisible(true);
     const scannedUid = await startScan();
 
     if (!scannedUid) {
-      // Error is shown in modal via nfcError/nfcStatus
       return;
     }
 
     setNfcLoginLoading(true);
 
     try {
-      // Look up user by NFC UID
       const { data, error } = await supabase
         .from("users")
         .select("id, name, nim, email, role")
@@ -201,12 +182,11 @@ export default function Login() {
         setNfcLoginLoading(false);
         Alert.alert(
           "KTM Tidak Dikenali",
-          "Kartu ini belum didaftarkan ke akun manapun.\n\nLogin manual dulu, lalu daftarkan KTM kamu di halaman Profile."
+          "Kartu ini belum didaftarkan ke akun manapun.\n\nLogin manual dulu, lalu daftarkan KTM kamu di halaman Profile.",
         );
         return;
       }
 
-      // Save session
       await AsyncStorage.setItem(
         "current_user",
         JSON.stringify({
@@ -215,11 +195,10 @@ export default function Login() {
           nim: data.nim,
           email: data.email,
           role: data.role,
-        })
+        }),
       );
       await AsyncStorage.setItem("last_active_time", Date.now().toString());
 
-      // Brief success state before navigating
       setTimeout(() => {
         setNfcModalVisible(false);
         setNfcLoginLoading(false);
@@ -283,7 +262,7 @@ export default function Login() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.logoSection}>
-            <PixelLogo />
+            <AppLogo />
           </View>
 
           <View style={styles.formSection}>
@@ -363,7 +342,6 @@ export default function Login() {
               )}
             </TouchableOpacity>
 
-            {/* ── NFC Login Button ── */}
             <TouchableOpacity
               style={[
                 styles.nfcBtn,
@@ -395,7 +373,6 @@ export default function Login() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── NFC Scan Modal ── */}
       <Modal
         visible={nfcModalVisible}
         transparent
@@ -417,8 +394,8 @@ export default function Login() {
                     nfcStatus === "success"
                       ? "rgba(52,199,89,0.12)"
                       : nfcStatus === "error"
-                      ? "rgba(255,59,48,0.12)"
-                      : "rgba(43,127,224,0.12)",
+                        ? "rgba(255,59,48,0.12)"
+                        : "rgba(43,127,224,0.12)",
                 },
               ]}
             >
@@ -427,16 +404,16 @@ export default function Login() {
                   nfcStatus === "success"
                     ? "checkmark-circle"
                     : nfcStatus === "error"
-                    ? "close-circle"
-                    : "card"
+                      ? "close-circle"
+                      : "card"
                 }
                 size={52}
                 color={
                   nfcStatus === "success"
                     ? "#34C759"
                     : nfcStatus === "error"
-                    ? "#FF3B30"
-                    : "#2B7FE0"
+                      ? "#FF3B30"
+                      : "#2B7FE0"
                 }
               />
             </View>
@@ -445,20 +422,20 @@ export default function Login() {
               {nfcLoginLoading
                 ? "Memproses..."
                 : nfcStatus === "success"
-                ? "KTM Terdeteksi!"
-                : nfcStatus === "error"
-                ? "Gagal Membaca"
-                : "Tempelkan KTM"}
+                  ? "KTM Terdeteksi!"
+                  : nfcStatus === "error"
+                    ? "Gagal Membaca"
+                    : "Tempelkan KTM"}
             </Text>
 
             <Text style={[styles.modalSubtitle, { color: theme.subtext }]}>
               {nfcLoginLoading
                 ? "Sedang mencari akun kamu..."
                 : nfcStatus === "success"
-                ? "Berhasil dibaca, memverifikasi akun..."
-                : nfcStatus === "error"
-                ? nfcError ?? "Terjadi kesalahan."
-                : "Dekatkan kartu KTM ke bagian belakang HP kamu"}
+                  ? "Berhasil dibaca, memverifikasi akun..."
+                  : nfcStatus === "error"
+                    ? (nfcError ?? "Terjadi kesalahan.")
+                    : "Dekatkan kartu KTM ke bagian belakang HP kamu"}
             </Text>
 
             {(nfcStatus === "scanning" || nfcLoginLoading) && (
@@ -527,8 +504,6 @@ const styles = StyleSheet.create({
   loginBtnDisabled: { opacity: 0.6 },
   forgotBtn: { alignItems: "flex-end", marginTop: 8 },
   forgotText: { fontSize: 12, fontWeight: "600" },
-
-  // NFC Button
   nfcBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -540,7 +515,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   nfcBtnText: { fontSize: 15, fontWeight: "600" },
-
   registerRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -549,8 +523,6 @@ const styles = StyleSheet.create({
   },
   noAccountText: { fontSize: 14 },
   registerLink: { fontSize: 14, fontWeight: "700" },
-
-  // NFC Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
