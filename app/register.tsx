@@ -60,7 +60,6 @@ function StepView({
 export default function SSOLogin() {
   const { currentTheme, isDarkMode } = useAppContext();
 
-  // Tangkap isNewUser dari routing callback.tsx
   const params = useLocalSearchParams<{
     verified?: string;
     email?: string;
@@ -69,6 +68,7 @@ export default function SSOLogin() {
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
+  const [otpToken, setOtpToken] = useState(""); // State baru untuk OTP
   const [nim, setNim] = useState("");
   const [nama, setNama] = useState("");
   const [password, setPassword] = useState("");
@@ -91,7 +91,6 @@ export default function SSOLogin() {
     if (verified === "true" && verifiedEmailParam) {
       setPending(verifiedEmailParam);
 
-      // Langsung bypass loading dan eksekusi step selanjutnya berdasarkan data dari callback
       if (isNewUserParam === "true") {
         setIsNewUser(true);
         setStep("new_user");
@@ -130,16 +129,49 @@ export default function SSOLogin() {
       }
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmed,
-        options: {
-          emailRedirectTo: "ufound://auth/callback",
-          shouldCreateUser: true,
-        },
+        // Hapus opsi deep link karena sekarang pakai OTP
       });
       if (error) throw error;
       setPending(trimmed);
       setStep("sent");
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Gagal mengirim link. Coba lagi.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fungsi baru untuk memverifikasi OTP
+  const handleVerifyOtp = async () => {
+    if (otpToken.trim().length !== 6) {
+      setErrorMsg("Masukkan 6 digit kode OTP.");
+      return;
+    }
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: pendingEmail,
+        token: otpToken.trim(),
+        type: "magiclink",
+      });
+      if (error) throw error;
+
+      const { data: user } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", pendingEmail.toLowerCase())
+        .maybeSingle();
+
+      if (user) {
+        setIsNewUser(false);
+        setStep("verify");
+      } else {
+        setIsNewUser(true);
+        setStep("new_user");
+      }
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Kode OTP salah atau kedaluwarsa.");
     } finally {
       setLoading(false);
     }
@@ -248,7 +280,7 @@ export default function SSOLogin() {
       setLoading(false);
     }
   };
-  
+
   const theme = {
     bg: currentTheme.background,
     card: currentTheme.cardBackground,
@@ -300,7 +332,7 @@ export default function SSOLogin() {
                 Registrasi akun kamu
               </Text>
               <Text style={[styles.subtitle, { color: theme.subtext }]}>
-                Masukkan email UMN kamu{"\n"}untuk menerima link verifikasi
+                Masukkan email UMN kamu{"\n"}untuk menerima kode OTP verifikasi
               </Text>
 
               <View style={styles.inputGroup}>
@@ -377,9 +409,7 @@ export default function SSOLogin() {
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
                   <>
-                    <Text style={styles.primaryBtnText}>
-                      Kirim Link Verifikasi
-                    </Text>
+                    <Text style={styles.primaryBtnText}>Kirim Kode OTP</Text>
                     <Ionicons
                       name="arrow-forward"
                       size={17}
@@ -389,19 +419,6 @@ export default function SSOLogin() {
                   </>
                 )}
               </TouchableOpacity>
-
-              <View
-                style={[
-                  styles.infoCard,
-                  { backgroundColor: theme.card, borderColor: theme.border },
-                ]}
-              >
-                <View style={styles.infoRow}>
-                  <Text style={[styles.infoText, { color: theme.subtext }]}>
-                    Setelah klik link, masukkan NIM & password
-                  </Text>
-                </View>
-              </View>
             </StepView>
           )}
 
@@ -420,10 +437,10 @@ export default function SSOLogin() {
                 />
               </View>
               <Text style={[styles.title, { color: theme.text }]}>
-                Cek Email Kamu
+                Verifikasi OTP
               </Text>
               <Text style={[styles.subtitle, { color: theme.subtext }]}>
-                Link verifikasi dikirim ke:
+                Masukkan 6 digit kode yang dikirim ke:
               </Text>
               <View style={[styles.emailChip, { borderColor: theme.primary }]}>
                 <Ionicons
@@ -437,54 +454,64 @@ export default function SSOLogin() {
                 </Text>
               </View>
 
-              <View
-                style={[
-                  styles.stepsCard,
-                  { backgroundColor: theme.card, borderColor: theme.border },
-                ]}
-              >
-                {[
-                  { num: "1", text: "Buka inbox email UMN kamu" },
-                  {
-                    num: "2",
-                    text: 'Klik link "Verifikasi & masuk" yang dikirim ke email dari U-Found',
-                  },
-                ].map((s, i) => (
-                  <View
-                    key={i}
+              <View style={styles.inputGroup}>
+                <View
+                  style={[
+                    styles.inputWrap,
+                    { backgroundColor: theme.card, borderColor: theme.border },
+                    errorMsg ? styles.inputError : null,
+                  ]}
+                >
+                  <Ionicons
+                    name="key-outline"
+                    size={17}
+                    color={theme.subtext}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
                     style={[
-                      styles.stepRow,
-                      i < 1 && {
-                        borderBottomWidth: 1,
-                        borderBottomColor: theme.border,
+                      styles.input,
+                      {
+                        color: theme.text,
+                        letterSpacing: 4,
+                        fontWeight: "700",
                       },
                     ]}
-                  >
-                    <View
-                      style={[styles.stepNum, { borderColor: theme.primary }]}
-                    >
-                      <Text
-                        style={[styles.stepNumText, { color: theme.primary }]}
-                      >
-                        {s.num}
-                      </Text>
-                    </View>
-                    <Text style={[styles.stepText, { color: theme.subtext }]}>
-                      {s.text}
-                    </Text>
-                  </View>
-                ))}
+                    placeholder="KODE OTP"
+                    placeholderTextColor={theme.subtext}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    value={otpToken}
+                    onChangeText={(t) => {
+                      setOtpToken(t);
+                      setErrorMsg("");
+                    }}
+                    onSubmitEditing={handleVerifyOtp}
+                  />
+                </View>
               </View>
 
-              <Text style={[styles.expireNote, { color: theme.subtext }]}>
-                Link berlaku selama 10 menit
-              </Text>
+              {errorMsg ? <ErrorBox msg={errorMsg} /> : null}
+
+              <TouchableOpacity
+                style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                onPress={handleVerifyOtp}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Verifikasi Kode</Text>
+                )}
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.ghostBtn, { borderColor: theme.border }]}
                 onPress={() => {
                   setStep("email");
                   setErrorMsg("");
+                  setOtpToken("");
                 }}
                 activeOpacity={0.7}
               >
@@ -495,30 +522,9 @@ export default function SSOLogin() {
                   style={{ marginRight: 6 }}
                 />
                 <Text style={[styles.ghostBtnText, { color: theme.text }]}>
-                  Kirim ulang / ganti email
+                  Ganti email / Kirim ulang
                 </Text>
               </TouchableOpacity>
-            </StepView>
-          )}
-
-          {step === "loading" && (
-            <StepView
-              style={[
-                styles.stepWrap,
-                { alignItems: "center", paddingTop: 60 },
-              ]}
-            >
-              <ActivityIndicator
-                size="large"
-                color={theme.primary}
-                style={{ marginBottom: 20 }}
-              />
-              <Text style={[styles.title, { color: theme.text }]}>
-                Memverifikasi…
-              </Text>
-              <Text style={[styles.subtitle, { color: theme.subtext }]}>
-                Sebentar ya
-              </Text>
             </StepView>
           )}
 

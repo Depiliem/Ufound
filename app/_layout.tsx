@@ -1,14 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { router, Stack } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, Platform } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AppProvider, useAppContext } from "../context/AppContext";
-import { deepLinkStore } from "../lib/deepLinkStore";
 import { supabase } from "../lib/supabase";
-
 
 const LAST_ACTIVE_KEY = "last_active_time";
 const USER_KEY = "current_user";
@@ -16,23 +13,23 @@ const THREE_DAYS_IN_MS = 3 * 24 * 60 * 60 * 1000;
 
 // ── FUNGSI PEMBANTU PUSH NOTIFICATION PERMISSION ──────────────────────────
 async function registerForPushNotificationsAsync() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("default", {
+      name: "default",
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
+      lightColor: "#FF231F7C",
     });
   }
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
+  if (existingStatus !== "granted") {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
-  if (finalStatus !== 'granted') {
-    console.log('Gagal mendapatkan token untuk push notification!');
+  if (finalStatus !== "granted") {
+    console.log("Gagal mendapatkan token untuk push notification!");
     return;
   }
 }
@@ -50,7 +47,6 @@ function GlobalSafeArea({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  // FIX ERROR 2: Berikan tipe data 'any' atau 'Subscription' dari expo-notifications
   const notificationListener = useRef<any>(null);
   const responseListener = useRef<any>(null);
 
@@ -103,25 +99,9 @@ export default function RootLayout() {
       },
     );
 
-    // ── DEEP LINKING ──
-    const navigateToCallback = (url: string) => {
-      console.log("[Layout] 🔗 Simpan URL & navigasi ke callback");
-      deepLinkStore.set(url);
-      router.push("/auth/callback");
-    };
-
-    const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
-      if (url.includes("auth/callback")) navigateToCallback(url);
-    });
-
-    Linking.getInitialURL().then((url) => {
-      if (url && url.includes("auth/callback")) navigateToCallback(url);
-    });
-
     return () => {
       appStateSubscription.remove();
-      linkingSubscription.remove();
-      
+
       // Panggil metode .remove() langsung dari instance target object-nya
       if (notificationListener.current) {
         notificationListener.current.remove();
