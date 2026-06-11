@@ -153,7 +153,7 @@ export default function SSOLogin() {
       const { error } = await supabase.auth.verifyOtp({
         email: pendingEmail,
         token: otpToken.trim(),
-        type: "email",
+        type: "signup",
       });
       if (error) throw error;
 
